@@ -12,7 +12,7 @@ Incluye automáticamente:
 
 ### 1) Usar en la nube (recomendado)
 La app puede desplegarse en **Streamlit Cloud** para que solo debas subir tus archivos TCX y descargar los XLSX.  
-👉 Pide el link a Daniel cuando esté publicada.
+👉 (https://made4try-tcx.streamlit.app/)
 
 ---
 
