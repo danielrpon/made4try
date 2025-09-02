@@ -2,5 +2,3 @@ streamlit
 pandas
 openpyxl
 plotly>=5.22
-pandas
-streamlit
