@@ -1,9 +1,12 @@
 import streamlit as st
 import pandas as pd
 import xml.etree.ElementTree as ET
-from io import TextIOWrapper, BytesIO
+from io import TextIOWrapper, BytesIO, StringIO  # >>> NEW: StringIO
 import gzip, zipfile
 from datetime import datetime
+
+# >>> NEW: Plotly
+import plotly.graph_objects as go
 
 # ====== Config ======
 st.set_page_config(page_title="TCX → XLSX (EF & DA)", page_icon="📈", layout="centered")
@@ -116,11 +119,9 @@ def parse_tcx_to_rows(uploaded_file):
                     })
     return rows
 
-def rows_to_xlsx_bytes(rows, out_basename):
-    """Crea un XLSX en memoria (BytesIO) con EF y DA, formateado."""
+# >>> NEW: dataframe común (tipos, EF y DA) reutilizable
+def rows_to_dataframe(rows) -> pd.DataFrame:
     from pandas import to_datetime
-    import pandas as pd
-    from openpyxl.utils import get_column_letter
 
     if not rows:
         rows = [{
@@ -161,7 +162,15 @@ def rows_to_xlsx_bytes(rows, out_basename):
 
     # Orden por tiempo
     if "time_utc" in df.columns:
-        df = df.sort_values("time_utc")
+        df = df.sort_values("time_utc").reset_index(drop=True)
+
+    return df
+
+def rows_to_xlsx_bytes(rows, out_basename):
+    """Crea un XLSX en memoria (BytesIO) con EF y DA, formateado."""
+    from openpyxl.utils import get_column_letter
+
+    df = rows_to_dataframe(rows)  # >>> NEW: reutiliza el dataframe común
 
     # Escribir a BytesIO
     bio = BytesIO()
@@ -202,11 +211,74 @@ def rows_to_xlsx_bytes(rows, out_basename):
             fmt("da", "0.000")
 
     bio.seek(0)
-    return bio
+    return bio, df  # >>> NEW: devolvemos también el df para graficar
+
+# >>> NEW: construcción de la figura
+def make_plot(df: pd.DataFrame, title: str = "Análisis de Carga Fisiológica – Made4Try") -> go.Figure:
+    # Mapea columnas esperadas
+    t = df["elapsed_s"] if "elapsed_s" in df.columns else pd.Series(range(len(df)))
+    p = df["power_w"] if "power_w" in df.columns else pd.Series([None]*len(df))
+    hr = df["hr_bpm"] if "hr_bpm" in df.columns else pd.Series([None]*len(df))
+
+    # EF/DA ya están calculadas en df si existen
+    ef = df["ef_power_hr"] if "ef_power_hr" in df.columns else p / hr.replace({0: pd.NA})
+    da = df["da"] if "da" in df.columns else ef.diff()
+
+    # Pendiente FC (bpm/s)
+    dt = pd.Series(t).diff().replace(0, pd.NA).fillna(1)
+    fc_slope = pd.Series(hr).diff().fillna(0) / dt
+
+    fig = go.Figure()
+
+    # Potencia (Y izq)
+    fig.add_trace(go.Scatter(x=t, y=p, name="Potencia (W)", mode="lines"))
+
+    # EF (Y izq)
+    fig.add_trace(go.Scatter(x=t, y=ef, name="EF", mode="lines"))
+
+    # FC (Y der)
+    fig.add_trace(go.Scatter(x=t, y=hr, name="FC (bpm)", mode="lines", yaxis="y2"))
+
+    # Pendiente FC (Y der)
+    fig.add_trace(go.Scatter(x=t, y=fc_slope, name="Pendiente FC (bpm/s)", mode="lines", yaxis="y2"))
+
+    # DA (Y der)
+    fig.add_trace(go.Scatter(x=t, y=da, name="DA (ΔEF)", mode="lines", yaxis="y2", line=dict(dash="dot")))
+
+    fig.update_layout(
+        title=title,
+        xaxis=dict(title="Tiempo transcurrido (segundos)"),
+        yaxis=dict(title="Potencia / EF"),
+        yaxis2=dict(title="Frecuencia cardiaca / Pendiente FC / DA", overlaying="y", side="right"),
+        legend=dict(orientation="h", x=0, y=1.12),
+        template="plotly_white",
+        margin=dict(l=50, r=50, t=70, b=50),
+    )
+    return fig
+
+# >>> NEW: mostrar y permitir descargar el HTML
+def render_plot_and_download(df: pd.DataFrame, base_name: str):
+    fig = make_plot(df)
+    st.plotly_chart(fig, use_container_width=True)
+
+    html_buf = StringIO()
+    # include_plotlyjs="cdn" hace el HTML más liviano
+    fig.write_html(html_buf, include_plotlyjs="cdn", full_html=True)
+    html_bytes = html_buf.getvalue().encode("utf-8")
+
+    file_html = f"{base_name}_analisis.html"
+    st.download_button(
+        label="⬇️ Descargar gráfica HTML",
+        data=html_bytes,
+        file_name=file_html,
+        mime="text/html",
+        key=f"html_{file_html}"
+    )
+    st.info("Se generó una versión HTML interactiva con zoom/hover y doble eje Y.")
 
 # ====== UI ======
 st.title("📈 TCX → XLSX (EF & DA)")
-st.write("Arrastra uno o varios archivos **.tcx** o **.tcx.gz**. Obtendrás un **.xlsx** limpio por cada sesión, con columnas **EF** y **DA**.")
+st.write("Arrastra uno o varios archivos **.tcx** o **.tcx.gz**. Obtendrás un **.xlsx** limpio por cada sesión, con columnas **EF** y **DA** y una **gráfica HTML** opcional.")
 
 uploads = st.file_uploader(
     "Sube tus archivos (puedes seleccionar varios)",
@@ -227,7 +299,7 @@ if uploads:
                     base = base[:-4]
                 out_name = f"{base}.xlsx"
 
-                bio = rows_to_xlsx_bytes(rows, base)
+                bio, df = rows_to_xlsx_bytes(rows, base)   # >>> NEW: recibimos df
                 xlsx_buffers.append((out_name, bio))
 
                 st.success(f"✔ {out_name} listo")
@@ -238,6 +310,10 @@ if uploads:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key=f"dl_{out_name}"
                 )
+
+                # >>> NEW: gráfica HTML para cada archivo procesado
+                render_plot_and_download(df, base_name=base)
+
             except Exception as e:
                 st.error(f"Error en {up.name}: {e}")
 
