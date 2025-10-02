@@ -348,7 +348,7 @@ def make_plot_three_axes(
     return fig
 
 # ====== UI ======
-st.title("📈 TCX → XLSX (EF & DA)")
+st.title("📈 TCX_Pro → XLSX (EF & DA)")
 st.write("Arrastra uno o varios archivos **.tcx** o **.tcx.gz**. Obtendrás un **.xlsx** por sesión, con columnas **EF** y **DA** y una **gráfica HTML** interactiva.")
 
 # Selector de modo de visualización (default: dos paneles)
