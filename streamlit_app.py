@@ -213,93 +213,187 @@ def rows_to_xlsx_bytes(rows, out_basename):
     return bio, df
 
 # ====== Gráficas ======
-def make_plot_adaptive_dual_panel(
+def make_plot_dual_panel(
     df: pd.DataFrame,
-    title: str = "Análisis de Carga Fisiológica – Made4Try"
+    title: str = "Análisis de Carga Fisiológica – Made4Try",
+    y1_range=None,           # Potencia (panel superior, eje izq)
+    y1_right_range=None,     # FC/Pendiente (panel superior, eje der)
+    y2_range=None            # EF/DA (panel inferior)
 ) -> go.Figure:
-    """
-    Versión mejorada de 2 paneles con DA en escala independiente.
-    Panel superior: Potencia + FC
-    Panel inferior: EF + DA (con eje secundario para DA)
-    """
-    t = df["elapsed_s"]
-    p = df.get("power_w")
+    t  = df["elapsed_s"]
+    p  = df.get("power_w")
     hr = df.get("hr_bpm")
-    
+
     ef = df.get("ef_power_hr")
     if ef is None:
         ef = (df["power_w"] / df["hr_bpm"].replace({0: pd.NA}))
-    
     da = df.get("da")
     if da is None:
         da = ef.diff()
-    
-    # Pendiente FC
+
+    # Pendiente FC (bpm/s)
     dt = pd.Series(t).diff().replace(0, pd.NA).fillna(1)
     fc_slope = pd.Series(hr).diff().fillna(0) / dt
-    
+
     fig = make_subplots(
-        rows=2, cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.1,
-        row_heights=[0.55, 0.45],
-        specs=[[{"secondary_y": True}], [{"secondary_y": True}]]
+        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08,
+        row_heights=[0.68, 0.32],
+        specs=[[{"secondary_y": True}], [{}]]
     )
-    
-    # Panel superior: Potencia (izq) + FC/Pendiente (der)
-    fig.add_trace(
-        go.Scatter(x=t, y=p, name="Potencia (W)", mode="lines",
-                   line=dict(color="#1f77b4", width=2)),
-        row=1, col=1, secondary_y=False
-    )
-    fig.add_trace(
-        go.Scatter(x=t, y=hr, name="FC (bpm)", mode="lines",
-                   line=dict(color="#ff7f0e", width=2)),
-        row=1, col=1, secondary_y=True
-    )
-    fig.add_trace(
-        go.Scatter(x=t, y=fc_slope, name="Pendiente FC (bpm/s)", mode="lines",
-                   line=dict(color="#2ca02c", width=1.5)),
-        row=1, col=1, secondary_y=True
-    )
-    
-    # Panel inferior: EF (izq) + DA (der, escala independiente)
-    fig.add_trace(
-        go.Scatter(x=t, y=ef, name="EF (W/bpm)", mode="lines",
-                   line=dict(color="#9467bd", width=2)),
-        row=2, col=1, secondary_y=False
-    )
-    fig.add_trace(
-        go.Scatter(x=t, y=da, name="DA (ΔEF)", mode="lines",
-                   line=dict(color="#d62728", width=2)),
-        row=2, col=1, secondary_y=True
-    )
-    
-    # Línea de referencia en 0 para DA
-    fig.add_hline(y=0, line_dash="dot", line_color="gray", opacity=0.5, row=2, col=1)
-    
-    # Títulos de ejes
+
+    # Panel superior
+    fig.add_trace(go.Scatter(x=t, y=p,  name="Potencia (W)", mode="lines"),
+                  row=1, col=1, secondary_y=False)
+    fig.add_trace(go.Scatter(x=t, y=hr, name="FC (bpm)", mode="lines"),
+                  row=1, col=1, secondary_y=True)
+    fig.add_trace(go.Scatter(x=t, y=fc_slope, name="Pendiente FC (bpm/s)", mode="lines"),
+                  row=1, col=1, secondary_y=True)
+
+    # Panel inferior
+    fig.add_trace(go.Scatter(x=t, y=ef, name="EF", mode="lines"),
+                  row=2, col=1)
+    fig.add_trace(go.Scatter(x=t, y=da, name="DA (ΔEF)", mode="lines",
+                             line=dict(dash="dot")),
+                  row=2, col=1)
+
+    # Títulos
     fig.update_xaxes(title_text="Tiempo transcurrido (s)", row=2, col=1)
     fig.update_yaxes(title_text="Potencia (W)", row=1, col=1, secondary_y=False)
     fig.update_yaxes(title_text="FC / Pendiente FC", row=1, col=1, secondary_y=True)
-    fig.update_yaxes(title_text="EF (W/bpm)", row=2, col=1, secondary_y=False)
-    fig.update_yaxes(title_text="DA (ΔEF)", row=2, col=1, secondary_y=True)
-    
+    fig.update_yaxes(title_text="EF / DA", row=2, col=1)
+
+    # Rangos opcionales
+    if y1_range:
+        fig.update_yaxes(range=list(y1_range), row=1, col=1, secondary_y=False)
+    if y1_right_range:
+        fig.update_yaxes(range=list(y1_right_range), row=1, col=1, secondary_y=True)
+    if y2_range:
+        fig.update_yaxes(range=list(y2_range), row=2, col=1)
+
     fig.update_layout(
         title=title,
-        height=700,
-        legend=dict(orientation="h", x=0, y=1.08),
+        legend=dict(orientation="h", x=0, y=1.12),
         template="plotly_white",
-        margin=dict(l=60, r=60, t=100, b=50),
+        margin=dict(l=50, r=50, t=70, b=50),
     )
-    
+    return fig
+
+def make_plot_three_axes(
+    df: pd.DataFrame,
+    title: str = "Análisis de Carga Fisiológica – Made4Try",
+    y_left_range=None,      # Potencia
+    y_right_range=None,     # FC/Pendiente
+    y_tertiary_range=None   # EF/DA
+) -> go.Figure:
+    t  = df["elapsed_s"]
+    p  = df.get("power_w")
+    hr = df.get("hr_bpm")
+
+    ef = df.get("ef_power_hr")
+    if ef is None:
+        ef = (df["power_w"] / df["hr_bpm"].replace({0: pd.NA}))
+    da = df.get("da")
+    if da is None:
+        da = ef.diff()
+
+    # Pendiente FC (bpm/s)
+    dt = pd.Series(t).diff().replace(0, pd.NA).fillna(1)
+    fc_slope = pd.Series(hr).diff().fillna(0) / dt
+
+    fig = go.Figure()
+
+    # Y1 (izquierda): Potencia
+    fig.add_trace(go.Scatter(x=t, y=p,  name="Potencia (W)", mode="lines", yaxis="y"))
+
+    # Y2 (derecha): FC y pendiente
+    fig.add_trace(go.Scatter(x=t, y=hr,       name="FC (bpm)",             mode="lines", yaxis="y2"))
+    fig.add_trace(go.Scatter(x=t, y=fc_slope, name="Pendiente FC (bpm/s)", mode="lines", yaxis="y2"))
+
+    # Y3 (derecha, ligeramente hacia adentro): EF y DA
+    fig.add_trace(go.Scatter(x=t, y=ef, name="EF",       mode="lines", yaxis="y3"))
+    fig.add_trace(go.Scatter(x=t, y=da, name="DA (ΔEF)", mode="lines", yaxis="y3",
+                             line=dict(dash="dot")))
+
+    layout = dict(
+        title=title,
+        xaxis=dict(title="Tiempo transcurrido (s)"),
+        yaxis=dict(title="Potencia (W)"),  # izquierda
+        yaxis2=dict(
+            title="FC / Pendiente FC",
+            overlaying="y",
+            side="right",
+            position=1.0
+        ),
+        yaxis3=dict(
+            title="EF / DA",
+            overlaying="y",
+            side="right",
+            position=0.98,  # separa rótulos de y2
+            showgrid=False
+        ),
+        legend=dict(orientation="h", x=0, y=1.12),
+        template="plotly_white",
+        margin=dict(l=50, r=70, t=70, b=50),
+    )
+
+    # Rangos opcionales
+    if y_left_range:
+        layout["yaxis"]["range"] = list(y_left_range)
+    if y_right_range:
+        layout["yaxis2"]["range"] = list(y_right_range)
+    if y_tertiary_range:
+        layout["yaxis3"]["range"] = list(y_tertiary_range)
+
+    fig.update_layout(**layout)
     return fig
 
 # ====== UI ======
-st.title("📈 TCX_Pro → XLSX (EF & DA)")
+st.title("📈 TCX → XLSX (EF & DA)")
 st.write("Arrastra uno o varios archivos **.tcx** o **.tcx.gz**. Obtendrás un **.xlsx** por sesión, con columnas **EF** y **DA** y una **gráfica HTML** interactiva.")
 
-st.info("✨ **Nuevo:** Ahora el DA tiene su propia escala para visualizar mejor sus cambios sutiles")
+# Selector de modo de visualización (default: dos paneles)
+chart_mode = st.radio(
+    "Modo de visualización",
+    options=["Dos paneles alineados (default)", "Eje terciario (1 panel)"],
+    index=0,
+    help="Los dos paneles mejoran la lectura de EF/DA; el eje terciario compacta todo en un solo panel."
+)
+
+# Ajustes manuales de ejes
+with st.expander("Ajustes manuales de ejes (opcional)"):
+    enable_ranges = st.checkbox("Definir rangos manuales")
+
+    y1_min = y1_max = y1r_min = y1r_max = y2_min = y2_max = None
+    yL_min = yL_max = yR_min = yR_max = yT_min = yT_max = None
+
+    if enable_ranges:
+        if chart_mode.startswith("Dos paneles"):
+            st.caption("Panel superior")
+            c1, c2, c3, c4 = st.columns(4)
+            y1_min = c1.number_input("Potencia min", value=float(0), step=10.0)
+            y1_max = c2.number_input("Potencia max", value=float(500), step=10.0)
+            y1r_min = c3.number_input("FC/Pendiente min", value=float(0), step=5.0)
+            y1r_max = c4.number_input("FC/Pendiente max", value=float(180), step=5.0)
+
+            st.caption("Panel inferior")
+            c5, c6 = st.columns(2)
+            y2_min = c5.number_input("EF/DA min", value=float(-0.5), step=0.1, format="%.3f")
+            y2_max = c6.number_input("EF/DA max", value=float(2.0), step=0.1, format="%.3f")
+        else:
+            st.caption("Eje izquierdo (Potencia)")
+            c1, c2 = st.columns(2)
+            yL_min = c1.number_input("Potencia min", value=float(0), step=10.0)
+            yL_max = c2.number_input("Potencia max", value=float(500), step=10.0)
+
+            st.caption("Eje derecho (FC / Pendiente)")
+            c3, c4 = st.columns(2)
+            yR_min = c3.number_input("FC/Pendiente min", value=float(0), step=5.0)
+            yR_max = c4.number_input("FC/Pendiente max", value=float(180), step=5.0)
+
+            st.caption("Tercer eje (EF / DA)")
+            c5, c6 = st.columns(2)
+            yT_min = c5.number_input("EF/DA min", value=float(-0.5), step=0.1, format="%.3f")
+            yT_max = c6.number_input("EF/DA max", value=float(2.0), step=0.1, format="%.3f")
 
 uploads = st.file_uploader(
     "Sube tus archivos (puedes seleccionar varios)",
@@ -308,9 +402,30 @@ uploads = st.file_uploader(
 )
 
 def render_plot_and_download(df: pd.DataFrame, base_name: str):
-    # Usar la nueva función con DA en eje independiente
-    fig = make_plot_adaptive_dual_panel(df)
-    
+    # Construir figura según modo y rangos
+    if chart_mode.startswith("Dos paneles"):
+        y1_range = (y1_min, y1_max) if (enable_ranges and y1_min is not None and y1_max is not None) else None
+        y1r_range = (y1r_min, y1r_max) if (enable_ranges and y1r_min is not None and y1r_max is not None) else None
+        y2_range = (y2_min, y2_max) if (enable_ranges and y2_min is not None and y2_max is not None) else None
+
+        fig = make_plot_dual_panel(
+            df,
+            y1_range=y1_range,
+            y1_right_range=y1r_range,
+            y2_range=y2_range
+        )
+    else:
+        yL_range = (yL_min, yL_max) if (enable_ranges and yL_min is not None and yL_max is not None) else None
+        yR_range = (yR_min, yR_max) if (enable_ranges and yR_min is not None and yR_max is not None) else None
+        yT_range = (yT_min, yT_max) if (enable_ranges and yT_min is not None and yT_max is not None) else None
+
+        fig = make_plot_three_axes(
+            df,
+            y_left_range=yL_range,
+            y_right_range=yR_range,
+            y_tertiary_range=yT_range
+        )
+
     st.plotly_chart(fig, use_container_width=True)
 
     html_buf = StringIO()
@@ -325,7 +440,7 @@ def render_plot_and_download(df: pd.DataFrame, base_name: str):
         mime="text/html",
         key=f"html_{file_html}"
     )
-    st.success("📊 Gráfica con escalas optimizadas: DA ahora es completamente visible")
+    st.info("Gráfica HTML interactiva con zoom/hover y ejes sincronizados.")
 
 if uploads:
     xlsx_buffers = []
