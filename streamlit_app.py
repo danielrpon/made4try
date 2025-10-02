@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 # ====== Config ======
-st.set_page_config(page_title="TCX → XLSX (EF & DA)", page_icon="📈", layout="centered")
+st.set_page_config(page_title="TCX_Pro → XLSX (EF & DA)", page_icon="📈", layout="centered")
 
 # ====== Utilidades ======
 NS = {
