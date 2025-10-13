@@ -11,6 +11,25 @@ from .metrics import add_metrics_minimal
 from .plots import make_plot_loads, make_plot_loads_dual, figure_to_html_bytes
 from .export_xlsx import dataframe_to_xlsx_bytes
 
+def run():
+    # Nada de código de UI fuera de esta función
+    st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout=LAYOUT)
+
+    st.title("📈 TCX → XLSX con EFR / IF / ICR / TSS / FSS")
+    st.write("Sube uno o varios **.tcx** o **.tcx.gz**. Ingresa tu FTP y FC_20min_max…")
+
+    uploads = st.file_uploader(
+        "Sube tus archivos (puedes seleccionar varios)",
+        type=["tcx", "gz"], accept_multiple_files=True, key="uploader_main",
+    )
+
+    if not uploads:
+        st.info("⬆️ Carga archivos para empezar.")
+        return
+
+    # — tu lógica actual para procesar y mostrar gráficas/descargas —
+    # (pega aquí todo lo que ya tenías en la sección UI)
+
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout=LAYOUT)
 st.title("📈 TCX → XLSX con EFR / IF / ICR / TSS / FSS")
 
