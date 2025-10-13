@@ -1,7 +1,11 @@
-# streamlit_app.py (fino)
-from made4try.app import * # o simplemente: ejecuta `streamlit run -m made4try.app`
+# streamlit_app.py
+import streamlit as st
+from made4try.app import run
 
-
+try:
+    run()
+except Exception as e:
+    st.exception(e)  # si algo revienta, se verá el error en pantalla
 # """
 # Aplicación Streamlit para convertir archivos TCX en tablas Excel con métricas
 # de entrenamiento (EFR, IF, ICR) e indicadores de carga (TSS/FSS).
