@@ -21,7 +21,8 @@ Esta versión incorpora una interfaz más profesional y optimizada:
 
 Para personalizar aún más el aspecto del aplicativo, se puede crear un
 archivo `.streamlit/config.toml` con una sección `[theme]` donde se
-definan colores, fuentes y bordes:contentReference[oaicite:0]{index=0}.
+definan colores, fuentes y bordes. La documentación oficial de Streamlit
+detalla las opciones disponibles:contentReference[oaicite:0]{index=0}.
 """
 
 import streamlit as st
@@ -41,7 +42,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# Estilos adicionales mediante Markdown y CSS
+# Estilos adicionales mediante Markdown y CSS (puede ajustarse al gusto)
 st.markdown(
     """
     <style>
@@ -79,6 +80,7 @@ def clean_base_name(name: str) -> str:
 
 # -----------------------------------------------------------------------------
 # Utilidades de parseo y conversión
+# Estas funciones se cachean para evitar reprocesar los mismos archivos.
 
 def parse_iso8601_z(ts: str):
     """Parsea una cadena ISO 8601 que puede terminar en Z (UTC)."""
@@ -92,8 +94,9 @@ def parse_iso8601_z(ts: str):
 def get_text(_elem, paths):
     """Extrae el texto de la primera coincidencia de rutas XPath en un elemento XML.
 
-    El parámetro `_elem` está precedido por un guion bajo para que Streamlit ignore
-    su hash cuando se usa en funciones cacheadas.
+    El parámetro `elem` está precedido por un guion bajo para que Streamlit ignore
+    su hash cuando se usa en funciones cacheadas. Esta convención se recomienda
+    cuando se pasan objetos no hashables a funciones decoradas por Streamlit.
     """
     for p in paths:
         node = _elem.find(p, NS)
@@ -380,7 +383,7 @@ def make_plot_loads_dual(df: pd.DataFrame, title: str) -> go.Figure:
     # Acumulados y promedios móviles
     fig.add_trace(go.Scatter(x=t, y=df["TSS"], name="TSS (acum)", mode="lines", line=dict(color="#1f77b4", width=2.5)), row=1, col=1)
     fig.add_trace(go.Scatter(x=t, y=df["FSS"], name="FSS (acum)", mode="lines", line=dict(color="#ff7f0e", width=2.5)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=t, y[df["TSS_inc_ma"], name="ΔTSS (MA)", mode="lines", line=dict(color="#2ca02c", width=1.5, dash="dash")), row=1, col=1)
+    fig.add_trace(go.Scatter(x=t, y=df["TSS_inc_ma"], name="ΔTSS (MA)", mode="lines", line=dict(color="#2ca02c", width=1.5, dash="dash")), row=1, col=1)
     fig.add_trace(go.Scatter(x=t, y=df["FSS_inc_ma"], name="ΔFSS (MA)", mode="lines", line=dict(color="#d62728", width=1.5, dash="dash")), row=1, col=1)
     # Incrementos instantáneos
     fig.add_trace(go.Scatter(x=t, y=df["TSS_inc"], name="ΔTSS (inst)", mode="lines", line=dict(color="#2ca02c", width=1)), row=2, col=1)
