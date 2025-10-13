@@ -5,7 +5,7 @@ from made4try.app import run
 try:
     run()
 except Exception as e:
-    st.exception(e)  # si algo revienta, se verá el error en pantalla
+    st.exception(e)
 # """
 # Aplicación Streamlit para convertir archivos TCX en tablas Excel con métricas
 # de entrenamiento (EFR, IF, ICR) e indicadores de carga (TSS/FSS).
