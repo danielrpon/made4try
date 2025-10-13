@@ -4,7 +4,7 @@ import streamlit as st
 from io import BytesIO
 import zipfile
 
-from config import PAGE_TITLE, PAGE_ICON, LAYOUT
+from .config import PAGE_TITLE, PAGE_ICON, LAYOUT
 from utils import clean_base_name
 from io_tcx import parse_tcx_to_rows, rows_to_dataframe
 from metrics import add_metrics_minimal
