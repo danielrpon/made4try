@@ -1,3 +1,4 @@
+# Carga/parseo TCX/TCX.GZ → rows/DataFrame
 # io_tcx.py
 import xml.etree.ElementTree as ET
 import pandas as pd

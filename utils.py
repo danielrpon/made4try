@@ -1,3 +1,4 @@
+# Helpers genéricos (fechas, tipos, nombres)
 # utils.py
 from datetime import datetime
 from io import BytesIO, TextIOWrapper

@@ -1,3 +1,4 @@
+# Exportar a XLSX y embeber HTML
 # export_xlsx.py
 from io import BytesIO
 import pandas as pd

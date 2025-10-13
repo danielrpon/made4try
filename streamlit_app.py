@@ -1,5 +1,5 @@
 # streamlit_app.py (fino)
-from made4try.app import *  # o simplemente: ejecuta `streamlit run -m made4try.app`
+from app import *  # o simplemente: ejecuta `streamlit run -m made4try.app`
 
 
 # """

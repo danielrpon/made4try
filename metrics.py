@@ -1,3 +1,4 @@
+# Cálculos EFR/IF/ICR/TSS/FSS y derivados
 # metrics.py
 import pandas as pd
 from .utils import ensure_datetime_sorted

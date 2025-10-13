@@ -1,3 +1,4 @@
+# Punto de entrada Streamlit (mínimo)
 # app.py
 import streamlit as st
 from io import BytesIO
