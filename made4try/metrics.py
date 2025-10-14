@@ -4,7 +4,7 @@ from .config import ROLLING_WINDOW_SECONDS, HR_FILL_MA_SECONDS, DISPLAY_SMOOTH_S
 
 def add_metrics_minimal(df: pd.DataFrame, base_name: str, ftp: float, fc20: float) -> pd.DataFrame:
     df = df.copy()
-
+st.caption(f"🔧 dt≈{first_dt:.2f}s · n_smooth={n_smooth} muestras · ventana={DISPLAY_SMOOTH_SECONDS}s")
     # ----- metadatos -----
     fecha = None
     if "time_utc" in df.columns and pd.api.types.is_datetime64_any_dtype(df["time_utc"]):
