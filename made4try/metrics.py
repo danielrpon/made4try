@@ -5,7 +5,7 @@ from .config import ROLLING_WINDOW_SECONDS  # ya lo usas para ventanas
 def add_metrics_minimal(df: pd.DataFrame, base_name: str, ftp: float, fc20: float) -> pd.DataFrame:
     df = df.copy()
     # ... (código inicial igual: fecha, construcción de m, etc.)
-
+    
     power = m["power_w"]
     hr = m["hr_bpm"].astype(float)
 
@@ -20,34 +20,36 @@ def add_metrics_minimal(df: pd.DataFrame, base_name: str, ftp: float, fc20: floa
     m["dt_s"] = dt
 
     # >>> Nuevo: reemplazo de FC faltante con promedio móvil de 10 s
-    REPLACE_HR_WITH_MA_SECS = 10  # <-- ajusta a 5/15/30 si quieres
+    REPLACE_HR_WITH_MA_SECS = 10  # <-- cambia a 5/15/etc si lo prefieres
     n10 = max(1, int(round(REPLACE_HR_WITH_MA_SECS / first_dt)))
 
-    # Interpolamos primero (para huecos pequeños), luego MA(n10)
+    # Interpolamos primero (si hay pequeños huecos), luego MA(n10)
     hr_interp = hr.interpolate(limit_direction="both")
     hr_ma10   = hr_interp.rolling(n10, min_periods=1).mean()
 
-    # FC efectiva: si la FC original es NaN o <=0, usamos el MA10
+    # Usamos la FC efectiva: si la FC original es NaN o <=0, usamos el MA10
     invalid_hr = hr.isna() | (hr <= 0)
     hr_eff = hr.where(~invalid_hr, hr_ma10)
 
-    # Si TODA la serie es NaN/0, tratamos FSS como 0
+    # Si TODA la serie de FC es NaN/0, hr_eff será NaN => tratamos FSS como 0
     if hr_eff.notna().sum() == 0:
         hr_eff = hr_eff.fillna(0.0)
 
     # %FTP y %FC_rel
-    ftp = float(ftp); fc20 = float(fc20)
-    m["pct_ftp"]    = (power / ftp) * 100.0
-    m["pct_fc_rel"] = (hr_eff / fc20) * 100.0
+    m["pct_ftp"] = (power / float(ftp)) * 100.0
+    m["pct_fc_rel"] = (hr_eff / float(fc20)) * 100.0
 
     # EFR, IF, ICR
     efr = m["pct_ftp"] / m["pct_fc_rel"]
-    IF  = power / ftp
+    IF  = power / float(ftp)
     icr = IF / efr
+
+    # Si por algún motivo quedan NaN (p.ej., FC20=0), no rompas el acumulado
     icr = icr.replace([float("inf"), -float("inf")], float("nan"))
 
-    # Incrementos
+    # Incrementos de carga
     tss_inc = (IF ** 2) * dt_h * 100.0
+    # clave: si ICR es NaN en alguna muestra, ese incremento se considera 0
     fss_inc = ((icr.fillna(0.0)) ** 2) * dt_h * 100.0
 
     # Acumulados
@@ -56,7 +58,8 @@ def add_metrics_minimal(df: pd.DataFrame, base_name: str, ftp: float, fc20: floa
     m["TSS"] = tss_inc.cumsum()
     m["FSS"] = fss_inc.cumsum()
 
-    # Promedios móviles para visualización (usa ventana global)
+    # Promedios móviles para visualización (usa ventana global de 30 s ya existente)
+    from .config import ROLLING_WINDOW_SECONDS
     n = max(1, int(round(ROLLING_WINDOW_SECONDS / first_dt)))
     m["TSS_inc_ma30"] = tss_inc.rolling(n, min_periods=1).mean()
     m["FSS_inc_ma30"] = fss_inc.rolling(n, min_periods=1).mean()
