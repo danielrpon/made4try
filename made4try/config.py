@@ -2,10 +2,11 @@
 # config.py
 PAGE_TITLE = "TCX → XLSX (EFR/IF/ICR/TSS/FSS)"
 PAGE_ICON = "📈"
-LAYOUT = "centered"
+LAYOUT = "Wide"
 
 # Ventanas y defaults
 ROLLING_WINDOW_SECONDS = 30
+HR_FILL_MA_SECONDS     = 10   # para reemplazo de FC al calcular FSS
 DEFAULT_SHEET_NAME = "DATA"
 
 # Namespaces TCX
