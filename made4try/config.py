@@ -2,7 +2,7 @@
 # config.py
 PAGE_TITLE = "TCX → XLSX (EFR/IF/ICR/TSS/FSS)"
 PAGE_ICON = "📈"
-LAYOUT = "Wide"
+LAYOUT = "centered"
 
 # Ventanas y defaults
 ROLLING_WINDOW_SECONDS = 30
