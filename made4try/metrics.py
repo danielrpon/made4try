@@ -1,10 +1,17 @@
+# made4try/metrics.py
 import pandas as pd
-from .config import ROLLING_WINDOW_SECONDS  # ventana para las curvas suavizadas (plot)
+from .config import (
+    ROLLING_WINDOW_SECONDS,   # ventana para curvas de carga que ya mostrabas
+    DISPLAY_SMOOTH_SECONDS,   # nuevo: suavizado de potencia/FC para visualización
+    HR_FILL_MA_SECONDS,       # nuevo: reemplazo de FC inválida al calcular FSS
+)
 
 def add_metrics_minimal(df: pd.DataFrame, base_name: str, ftp: float, fc20: float) -> pd.DataFrame:
     """
     Calcula EFR/IF/ICR y las cargas TSS/FSS.
-    Rellena huecos de FC con un promedio móvil de X segundos para que FSS no se rompa.
+    - Rellena huecos/valores inválidos de FC con un promedio móvil de HR_FILL_MA_SECONDS
+      para que FSS/ICR no se rompan.
+    - Crea señales suavizadas de potencia y FC (DISPLAY_SMOOTH_SECONDS) SOLO para visualización.
     """
     df = df.copy()
 
@@ -44,21 +51,22 @@ def add_metrics_minimal(df: pd.DataFrame, base_name: str, ftp: float, fc20: floa
     dt_h = dt / 3600.0
     m["dt_s"] = dt
 
-    # ---------------- FC efectiva (relleno con MA de X s) ----------------
-    REPLACE_HR_WITH_MA_SECS = 30  # <-- cámbialo a 10/15/20 si lo prefieres
-    n_fill = max(1, int(round(REPLACE_HR_WITH_MA_SECS / first_dt)))
+    # ---------------- FC efectiva (relleno con MA de HR_FILL_MA_SECONDS) ----------------
+    n_fill = max(1, int(round(HR_FILL_MA_SECONDS / first_dt)))
 
-    # Interpolamos pequeños huecos y aplicamos MA(n_fill)
     hr_interp = hr.interpolate(limit_direction="both")
     hr_ma     = hr_interp.rolling(n_fill, min_periods=1).mean()
 
-    # Si la FC original es NaN o <= 0, usamos la versión suavizada
     invalid_hr = hr.isna() | (hr <= 0)
     hr_eff = hr.where(~invalid_hr, hr_ma)
 
-    # Si toda la serie es inválida, forzamos 0 para no romper FSS
     if hr_eff.notna().sum() == 0:
         hr_eff = hr_eff.fillna(0.0)
+
+    # ---------------- NUEVO: señales suavizadas para visualización ----------------
+    n_disp = max(1, int(round(DISPLAY_SMOOTH_SECONDS / first_dt)))
+    m["power_smooth"] = power.interpolate(limit_direction="both").rolling(n_disp, min_periods=1).mean()
+    m["hr_smooth"]    = hr.interpolate(limit_direction="both").rolling(n_disp, min_periods=1).mean()
 
     # ---------------- métricas base ----------------
     m["pct_ftp"]    = (power / ftp) * 100.0
@@ -78,7 +86,7 @@ def add_metrics_minimal(df: pd.DataFrame, base_name: str, ftp: float, fc20: floa
     m["TSS"]     = tss_inc.cumsum()
     m["FSS"]     = fss_inc.cumsum()
 
-    # ---------------- promedios móviles para visualización ----------------
+    # ---------------- promedios móviles para visualización de incrementos ----------------
     n_plot = max(1, int(round(ROLLING_WINDOW_SECONDS / first_dt)))
     m["TSS_inc_ma30"] = tss_inc.rolling(n_plot, min_periods=1).mean()
     m["FSS_inc_ma30"] = fss_inc.rolling(n_plot, min_periods=1).mean()
