@@ -8,18 +8,20 @@ PAGE_ICON  = "📈"
 LAYOUT     = "centered"   # cambia a "wide" si prefieres más espacio
 
 # --------- Ventanas y defaults ----------
+
 # Ventana (en segundos) para promedios móviles de curvas de carga (TSS/FSS) mostradas.
-ROLLING_WINDOW_SECONDS   = 30
+ROLLING_WINDOW_SECONDS = 30
 
-# NUEVO: suavizado de potencia y FC para visualización (no afecta TSS/FSS).
-# Recomendado: 5s si muestreos ~1 Hz; 10s si hay más ruido/intervalos irregulares.
-DISPLAY_SMOOTH_SECONDS   = 5
+# Ventana para suavizado de potencia y FC (visualización)
+# Recomendado: 5s si el muestreo es de ~1 Hz; 10s si los datos son más ruidosos o dispares.
+DISPLAY_SMOOTH_SECONDS = 5
 
-# Opcional: ventana para reemplazar FC inválida (NaN/<=0) al calcular FSS (sí afecta FSS).
-# Útil cuando hay huecos largos en la FC; 20–30s suele ser estable.
-HR_FILL_MA_SECONDS       = 30
+# Ventana para interpolar y reemplazar FC inválida (NaN/<=0) al calcular FSS.
+# Este valor sí afecta el cálculo final de métricas de carga.
+# Usualmente 20–30s da resultados estables si hay huecos largos en el registro de FC.
+HR_FILL_MA_SECONDS = 30
 
-# Nombre por defecto de la hoja en Excel
+# Nombre por defecto de la hoja de datos exportada a Excel
 DEFAULT_SHEET_NAME = "DATA"
 
 # --------- Namespaces TCX ----------
