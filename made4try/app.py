@@ -1,9 +1,10 @@
-# made4try/app.py  — Punto de entrada Streamlit (mínimo)
+# made4try/app.py  — Punto de entrada Streamlit
 import streamlit as st
 from io import BytesIO
 import zipfile
 
-from .config import PAGE_TITLE, PAGE_ICON, LAYOUT
+from . import config  # <— para ajustar DISPLAY_SMOOTH_SECONDS en runtime
+from .config import PAGE_TITLE, PAGE_ICON, LAYOUT, DISPLAY_SMOOTH_SECONDS
 from .utils import clean_base_name
 from .io_tcx import parse_tcx_to_rows, rows_to_dataframe
 from .metrics import add_metrics_minimal
@@ -20,6 +21,17 @@ def run():
         "Para cada archivo ingresa **FTP (W)** y **FC_20min_max (bpm)**.\n\n"
         "**ICR = IF ÷ EFR**.  TSS=Σ(IF²·Δt_h·100), FSS=Σ(ICR²·Δt_h·100)."
     )
+
+    # --- Sidebar: controles de visualización ---
+    with st.sidebar:
+        st.header("⚙️ Configuración de visualización")
+        smooth_secs = st.slider(
+            "Suavizado de Potencia/FC (s)",
+            1, 30, DISPLAY_SMOOTH_SECONDS,
+            help="Ventana en segundos para suavizar las curvas de Potencia y Frecuencia Cardíaca."
+        )
+        # Actualiza el valor global usado en metrics.py
+        config.DISPLAY_SMOOTH_SECONDS = int(smooth_secs)
 
     # --- Uploader ---
     uploads = st.file_uploader(
@@ -62,9 +74,12 @@ def run():
                 # Parseo + métricas
                 rows = parse_tcx_to_rows(up)
                 df_raw = rows_to_dataframe(rows)
-                df_final = add_metrics_minimal(
-                    df_raw, base_name=base, ftp=ftp, fc20=fc20
-                )
+
+                # Opción A (actual): metrics.py usa config.DISPLAY_SMOOTH_SECONDS
+                df_final = add_metrics_minimal(df_raw, base_name=base, ftp=ftp, fc20=fc20)
+
+                # Opción B (si más adelante aceptas el parámetro en metrics.py):
+                # df_final = add_metrics_minimal(df_raw, base_name=base, ftp=ftp, fc20=fc20, smooth_secs=int(smooth_secs))
 
                 # Gráfica base
                 st.subheader("📊 Análisis con Señales Base")
