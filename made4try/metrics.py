@@ -4,7 +4,7 @@ from .config import ROLLING_WINDOW_SECONDS, HR_FILL_MA_SECONDS, DISPLAY_SMOOTH_S
 
 def add_metrics_minimal(df: pd.DataFrame, base_name: str, ftp: float, fc20: float) -> pd.DataFrame:
     df = df.copy()
-st.caption(f"🔧 dt≈{first_dt:.2f}s · n_smooth={n_smooth} muestras · ventana={DISPLAY_SMOOTH_SECONDS}s")
+
     # ----- metadatos -----
     fecha = None
     if "time_utc" in df.columns and pd.api.types.is_datetime64_any_dtype(df["time_utc"]):
@@ -52,6 +52,7 @@ st.caption(f"🔧 dt≈{first_dt:.2f}s · n_smooth={n_smooth} muestras · ventan
 
     # Ventana para suavizar curvas visibles de potencia/FC (no toca FSS)
     n_smooth = max(1, int(round(DISPLAY_SMOOTH_SECONDS / first_dt)))
+    st.caption(f"🔧 dt≈{first_dt:.2f}s · n_smooth={n_smooth} muestras · ventana={DISPLAY_SMOOTH_SECONDS}s")
     power_smooth = power.interpolate(limit_direction="both").rolling(n_smooth, min_periods=1).mean()
     hr_smooth    = hr_interp.rolling(n_smooth, min_periods=1).mean()
 
