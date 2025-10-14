@@ -1,17 +1,41 @@
 # Figuras Plotly (básica y dual)
-# plots.py
+# made4try/plots.py
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from io import StringIO
 
+def _get_series(df, smooth_name, raw_name):
+    """Devuelve serie suavizada si existe; si no, la cruda (o None)."""
+    if smooth_name in df.columns:
+        return df[smooth_name]
+    if raw_name in df.columns:
+        return df[raw_name]
+    return None
+
 def make_plot_loads(df, title, show_base=True):
     t = df["elapsed_s"]
     fig = go.Figure()
+
+    # Cargas acumuladas
     fig.add_trace(go.Scatter(x=t, y=df["TSS"], name="TSS (acum)", mode="lines"))
     fig.add_trace(go.Scatter(x=t, y=df["FSS"], name="FSS (acum)", mode="lines"))
+
+    # Señales base (preferir suavizadas)
     if show_base:
-        if "power_w" in df: fig.add_trace(go.Scatter(x=t, y=df["power_w"], name="Potencia (W)", mode="lines", yaxis="y2"))
-        if "hr_bpm"  in df: fig.add_trace(go.Scatter(x=t, y=df["hr_bpm"],  name="FC (bpm)",      mode="lines", yaxis="y3"))
+        pw = _get_series(df, "power_smooth", "power_w")
+        hr = _get_series(df, "hr_smooth",    "hr_bpm")
+
+        if pw is not None:
+            fig.add_trace(go.Scatter(
+                x=t, y=pw, name="Potencia (suav.)" if "power_smooth" in df.columns else "Potencia (W)",
+                mode="lines", yaxis="y2"
+            ))
+        if hr is not None:
+            fig.add_trace(go.Scatter(
+                x=t, y=hr, name="FC (suav.)" if "hr_smooth" in df.columns else "FC (bpm)",
+                mode="lines", yaxis="y3"
+            ))
+
     fig.update_layout(
         title=title,
         xaxis=dict(title="Tiempo (s)"),
@@ -26,21 +50,40 @@ def make_plot_loads(df, title, show_base=True):
 
 def make_plot_loads_dual(df, title):
     t = df["elapsed_s"]
-    fig = make_subplots(rows=2, cols=1,
-                        subplot_titles=("Carga Acumulada + Promedios (30s)",
-                                        "Dinámica Instantánea (ΔTSS/ΔFSS)"),
-                        vertical_spacing=0.12, row_heights=[0.6,0.4])
+    fig = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=("Carga Acumulada + Promedios (30s)",
+                        "Dinámica Instantánea (ΔTSS/ΔFSS)"),
+        vertical_spacing=0.12, row_heights=[0.6, 0.4]
+    )
 
-    fig.add_trace(go.Scatter(x=t, y=df["TSS"], name="TSS (acum)", mode="lines", yaxis="y1"), row=1,col=1)
-    fig.add_trace(go.Scatter(x=t, y=df["FSS"], name="FSS (acum)", mode="lines", yaxis="y2"), row=1,col=1)
-    fig.add_trace(go.Scatter(x=t, y=df["TSS_inc_ma30"], name="ΔTSS (MA30s)", mode="lines", yaxis="y3"), row=1,col=1)
-    fig.add_trace(go.Scatter(x=t, y=df["FSS_inc_ma30"], name="ΔFSS (MA30s)", mode="lines", yaxis="y4"), row=1,col=1)
+    # Acumulados + promedios de incrementos
+    fig.add_trace(go.Scatter(x=t, y=df["TSS"], name="TSS (acum)", mode="lines", yaxis="y1"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=t, y=df["FSS"], name="FSS (acum)", mode="lines", yaxis="y2"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=t, y=df["TSS_inc_ma30"], name="ΔTSS (MA30s)", mode="lines", yaxis="y3"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=t, y=df["FSS_inc_ma30"], name="ΔFSS (MA30s)", mode="lines", yaxis="y4"), row=1, col=1)
 
-    if "power_ma30" in df: fig.add_trace(go.Scatter(x=t, y=df["power_ma30"], name="Potencia (MA30s)", mode="lines", yaxis="y5"), row=1,col=1)
-    if "hr_ma30"   in df: fig.add_trace(go.Scatter(x=t, y=df["hr_ma30"],   name="FC (MA30s)",       mode="lines", yaxis="y6"), row=1,col=1)
+    # Señales base en la parte superior: preferir suavizadas; si no hay, usar MA30 si existe
+    pw = _get_series(df, "power_smooth", "power_ma30" if "power_ma30" in df.columns else "power_w")
+    hr = _get_series(df, "hr_smooth",    "hr_ma30"    if "hr_ma30"    in df.columns else "hr_bpm")
 
-    fig.add_trace(go.Scatter(x=t, y=df["TSS_inc"], name="ΔTSS (inst)", mode="lines"), row=2,col=1)
-    fig.add_trace(go.Scatter(x=t, y=df["FSS_inc"], name="ΔFSS (inst)", mode="lines"), row=2,col=1)
+    if pw is not None:
+        fig.add_trace(go.Scatter(
+            x=t, y=pw, name="Potencia (suav.)" if "power_smooth" in df.columns else
+                         ("Potencia (MA30s)" if "power_ma30" in df.columns else "Potencia (W)"),
+            mode="lines", yaxis="y5"
+        ), row=1, col=1)
+
+    if hr is not None:
+        fig.add_trace(go.Scatter(
+            x=t, y=hr, name="FC (suav.)" if "hr_smooth" in df.columns else
+                         ("FC (MA30s)" if "hr_ma30" in df.columns else "FC (bpm)"),
+            mode="lines", yaxis="y6"
+        ), row=1, col=1)
+
+    # Incrementos instante a instante
+    fig.add_trace(go.Scatter(x=t, y=df["TSS_inc"], name="ΔTSS (inst)", mode="lines"), row=2, col=1)
+    fig.add_trace(go.Scatter(x=t, y=df["FSS_inc"], name="ΔFSS (inst)", mode="lines"), row=2, col=1)
 
     fig.update_xaxes(title_text="Tiempo (s)", row=2, col=1)
     fig.update_layout(
