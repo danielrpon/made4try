@@ -1,9 +1,10 @@
-# made4try/app.py  — Punto de entrada Streamlit
+# made4try/app.py — Punto de entrada Streamlit
 import streamlit as st
 from io import BytesIO
 import zipfile
+import traceback  # <-- para mostrar el stacktrace en la UI
 
-from . import config  # <— para ajustar DISPLAY_SMOOTH_SECONDS en runtime
+from . import config  # para ajustar DISPLAY_SMOOTH_SECONDS en runtime
 from .config import PAGE_TITLE, PAGE_ICON, LAYOUT, DISPLAY_SMOOTH_SECONDS
 from .utils import clean_base_name
 from .io_tcx import parse_tcx_to_rows, rows_to_dataframe
@@ -28,9 +29,9 @@ def run():
         smooth_secs = st.slider(
             "Suavizado de Potencia/FC (s)",
             1, 30, DISPLAY_SMOOTH_SECONDS,
-            help="Ventana en segundos para suavizar las curvas de Potencia y Frecuencia Cardíaca."
+            help="Ventana en segundos para suavizar las curvas de Potencia y Frecuencia Cardíaca en los gráficos."
         )
-        # Actualiza el valor global usado en metrics.py
+        # Actualiza el valor global que usan los módulos de lógica (metrics.py)
         config.DISPLAY_SMOOTH_SECONDS = int(smooth_secs)
 
     # --- Uploader ---
@@ -75,13 +76,12 @@ def run():
                 rows = parse_tcx_to_rows(up)
                 df_raw = rows_to_dataframe(rows)
 
-                # Opción A (actual): metrics.py usa config.DISPLAY_SMOOTH_SECONDS
-                df_final = add_metrics_minimal(df_raw, base_name=base, ftp=ftp, fc20=fc20)
+                # metrics.py usará config.DISPLAY_SMOOTH_SECONDS internamente
+                df_final = add_metrics_minimal(
+                    df_raw, base_name=base, ftp=ftp, fc20=fc20
+                )
 
-                # Opción B (si más adelante aceptas el parámetro en metrics.py):
-                # df_final = add_metrics_minimal(df_raw, base_name=base, ftp=ftp, fc20=fc20, smooth_secs=int(smooth_secs))
-
-                # Gráfica base
+                # ---------- Gráfica base ----------
                 st.subheader("📊 Análisis con Señales Base")
                 fig1 = make_plot_loads(
                     df_final, title=f"Dinámica de Carga – {base}", show_base=True
@@ -96,7 +96,7 @@ def run():
                     key=f"html_full_{idx}",
                 )
 
-                # Gráfica dual
+                # ---------- Gráfica dual ----------
                 st.subheader("📈 Comparación: Acumulados vs. Segundo a Segundo")
                 fig2 = make_plot_loads_dual(
                     df_final, title=f"TSS/FSS: Acumulado vs. Dinámico – {base}"
@@ -111,11 +111,9 @@ def run():
                     key=f"html_dyn_{idx}",
                 )
 
-                st.info(
-                    "💡 Arriba: acumulados + promedios móviles. Abajo: incrementos instantáneos."
-                )
+                st.info("💡 Arriba: acumulados + promedios móviles. Abajo: incrementos instantáneos.")
 
-                # Excel con “gráfica embebida” (texto/preview + link al HTML)
+                # ---------- Excel con “gráfica embebida” ----------
                 xlsx_bio = dataframe_to_xlsx_bytes(
                     df_final, html_chart=html2.decode("utf-8")
                 )
@@ -130,7 +128,7 @@ def run():
                     key=f"xlsx_{idx}",
                 )
 
-                # Métricas totales (guardadas en la primera fila)
+                # ---------- Métricas totales ----------
                 tss_total = float(df_final["TSS_total"].iloc[0])
                 fss_total = float(df_final["FSS_total"].iloc[0])
                 c3, c4 = st.columns(2)
@@ -138,7 +136,9 @@ def run():
                 c4.metric("FSS Total", f"{fss_total:.1f}")
 
             except Exception as e:
+                # Mensaje legible + traceback completo para diagnóstico
                 st.error(f"❌ Error en {up.name}: {e}")
+                st.code(traceback.format_exc())
 
     # --- ZIP con todos los Excel (si hay más de uno) ---
     if len(xlsx_buffers) > 1:
