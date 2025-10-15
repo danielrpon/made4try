@@ -1,10 +1,12 @@
+# =========================
 # made4try/app.py — Punto de entrada Streamlit
+# =========================
 import streamlit as st
 from io import BytesIO
 import zipfile
-import traceback  # <-- para mostrar el stacktrace en la UI
+import traceback  # para ver el stacktrace en la UI si algo falla
 
-from . import config  # para ajustar DISPLAY_SMOOTH_SECONDS en runtime
+from . import config  # por si quieres reflejar el valor elegido globalmente
 from .config import PAGE_TITLE, PAGE_ICON, LAYOUT, DISPLAY_SMOOTH_SECONDS
 from .utils import clean_base_name
 from .io_tcx import parse_tcx_to_rows, rows_to_dataframe
@@ -29,9 +31,9 @@ def run():
         smooth_secs = st.slider(
             "Suavizado de Potencia/FC (s)",
             1, 30, DISPLAY_SMOOTH_SECONDS,
-            help="Ventana en segundos para suavizar las curvas de Potencia y Frecuencia Cardíaca en los gráficos."
+            help="Ventana en segundos para suavizar Potencia y Frecuencia Cardíaca en los gráficos."
         )
-        # Actualiza el valor global que usan los módulos de lógica (metrics.py)
+        # (opcional) reflejar globalmente el valor elegido
         config.DISPLAY_SMOOTH_SECONDS = int(smooth_secs)
 
     # --- Uploader ---
@@ -76,9 +78,9 @@ def run():
                 rows = parse_tcx_to_rows(up)
                 df_raw = rows_to_dataframe(rows)
 
-                # metrics.py usará config.DISPLAY_SMOOTH_SECONDS internamente
+                # PASO CLAVE: pasar smooth_secs al cálculo para que plots use power_smooth/hr_smooth
                 df_final = add_metrics_minimal(
-                    df_raw, base_name=base, ftp=ftp, fc20=fc20
+                    df_raw, base_name=base, ftp=ftp, fc20=fc20, smooth_secs=int(smooth_secs)
                 )
 
                 # ---------- Gráfica base ----------
