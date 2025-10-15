@@ -5,23 +5,19 @@
 # --------- UI ----------
 PAGE_TITLE = "TCX → XLSX (EFR/IF/ICR/TSS/FSS)"
 PAGE_ICON  = "📈"
-LAYOUT     = "centered"   # cambia a "wide" si prefieres más espacio
+LAYOUT     = "centered"  # usa "wide" si prefieres más espacio horizontal
 
 # --------- Ventanas y defaults ----------
-
-# Ventana (en segundos) para promedios móviles de curvas de carga (TSS/FSS) mostradas.
+# MA para visualizar incrementos de carga (ΔTSS/ΔFSS) en los gráficos
 ROLLING_WINDOW_SECONDS = 30
 
-# Ventana para suavizado de potencia y FC (visualización)
-# Recomendado: 5s si el muestreo es de ~1 Hz; 10s si los datos son más ruidosos o dispares.
+# Suavizado visual de Potencia/FC (no afecta TSS/FSS). Lo puede sobreescribir el slider.
 DISPLAY_SMOOTH_SECONDS = 5
 
-# Ventana para interpolar y reemplazar FC inválida (NaN/<=0) al calcular FSS.
-# Este valor sí afecta el cálculo final de métricas de carga.
-# Usualmente 20–30s da resultados estables si hay huecos largos en el registro de FC.
+# Ventana para rellenar FC inválida (NaN/<=0) al calcular FSS (sí afecta FSS)
 HR_FILL_MA_SECONDS = 30
 
-# Nombre por defecto de la hoja de datos exportada a Excel
+# Nombre de la hoja en Excel
 DEFAULT_SHEET_NAME = "DATA"
 
 # --------- Namespaces TCX ----------
