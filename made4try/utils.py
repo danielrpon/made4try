@@ -1,42 +1,64 @@
-# Helpers genéricos (fechas, tipos, nombres)
-# utils.py
-from datetime import datetime
-from io import BytesIO, TextIOWrapper
-import gzip
+# =========================
+# made4try/utils.py
+# =========================
+from __future__ import annotations
+
+import os
+import re
+from typing import Optional, Any, Iterable
+
 import pandas as pd
 
-def parse_iso8601_z(ts: str):
-    try:
-        if ts and ts.endswith("Z"):
-            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-        return datetime.fromisoformat(ts) if ts else None
-    except Exception:
-        return None
-
-def to_float(x):
-    try: return float(x)
-    except (TypeError, ValueError): return None
-
-def to_int(x):
-    try: return int(float(x))
-    except (TypeError, ValueError): return None
-
-def open_maybe_gzip_bytes(uploaded_file):
-    name = uploaded_file.name.lower()
-    if name.endswith(".gz"):
-        gz = gzip.GzipFile(fileobj=BytesIO(uploaded_file.getvalue()), mode="rb")
-        return TextIOWrapper(gz, encoding="utf-8")
-    return TextIOWrapper(BytesIO(uploaded_file.getvalue()), encoding="utf-8")
 
 def clean_base_name(name: str) -> str:
-    base = name
-    if base.lower().endswith(".gz"): base = base[:-3]
-    if base.lower().endswith(".tcx"): base = base[:-4]
-    return base
+    """
+    Devuelve un nombre base sin extensiones .tcx ni .gz (case-insensitive).
+    Ejemplos:
+        'actividad.TCX'      -> 'actividad'
+        'myfile.tcx.gz'      -> 'myfile'
+        'ruta/act.tcx'       -> 'act'
+        'act'                -> 'act'
+    """
+    if not name:
+        return "archivo"
+    base = os.path.basename(name)
+    # quita .gz si está al final
+    if base.lower().endswith(".gz"):
+        base = base[:-3]
+    # quita .tcx si está al final
+    if base.lower().endswith(".tcx"):
+        base = base[:-4]
+    # limpia espacios sobrantes
+    return base.strip() or "archivo"
 
-def ensure_datetime_sorted(df: pd.DataFrame, col="time_utc") -> pd.DataFrame:
-    if col in df.columns:
-        dt = pd.to_datetime(df[col], errors="coerce", utc=True).dt.tz_convert(None)
-        df[col] = dt
-        df = df.sort_values(col).reset_index(drop=True)
-    return df
+
+def safe_div(a: float | int | None, b: float | int | None, default: Optional[float] = None) -> Optional[float]:
+    """
+    División segura que evita ZeroDivisionError y None.
+    - Devuelve `default` si 'b' es 0/None o si 'a' es None.
+    """
+    try:
+        if a is None or b in (None, 0, 0.0):
+            return default
+        return float(a) / float(b)
+    except Exception:
+        return default
+
+
+def coerce_numeric(s: Iterable[Any]) -> pd.Series:
+    """
+    Convierte un iterable a Serie numérica (float) con NaN donde no se pueda.
+    """
+    return pd.to_numeric(pd.Series(s), errors="coerce")
+
+
+def ensure_sorted_by(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """
+    Ordena un DataFrame por las columnas dadas si existen y hay valores.
+    No modifica el original.
+    """
+    df2 = df.copy()
+    valid = [c for c in cols if c in df2.columns and df2[c].notna().any()]
+    if valid:
+        df2 = df2.sort_values(valid).reset_index(drop=True)
+    return df2
