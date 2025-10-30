@@ -1,3 +1,6 @@
+import sys, os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # made4try/app.py — Punto de entrada Streamlit
 import streamlit as st
 from io import BytesIO
@@ -9,12 +12,16 @@ from user_auth.models import init_db
 from user_auth.storage import execute
 
 # --- App base ---
-from .config import PAGE_TITLE, PAGE_ICON, LAYOUT
-from .utils import clean_base_name
-from .io_tcx import parse_tcx_to_rows, rows_to_dataframe
-from .metrics import add_metrics_minimal
-from .plots import make_plot_loads, make_plot_loads_dual, figure_to_html_bytes
-from .export_xlsx import dataframe_to_xlsx_bytes
+from made4try.config import PAGE_TITLE, PAGE_ICON, LAYOUT
+from made4try.utils import clean_base_name
+from made4try.io_tcx import parse_tcx_to_rows, rows_to_dataframe
+from made4try.metrics import add_metrics_minimal
+from made4try.plots import make_plot_loads, make_plot_loads_dual, figure_to_html_bytes
+from made4try.export_xlsx import dataframe_to_xlsx_bytes
+
+from made4try.user_auth.ui import render_auth_sidebar, require_login, is_admin
+from made4try.user_auth.models import init_db
+from made4try.user_auth.storage import execute
 
 
 def run():
