@@ -3,6 +3,15 @@ import streamlit as st
 from .models import init_db
 from .auth import create_user, login, get_user_by_email
 
+def _safe_rerun():
+    """Rerun compatible con Streamlit nuevo/antiguo."""
+    try:
+        # Streamlit >= 1.27 aprox.
+        st.rerun()
+    except AttributeError:
+        # Compat: versiones antiguas
+        st.experimental_rerun()
+
 def render_auth_sidebar():
     """Panel lateral con login/signup y estado de sesión."""
     init_db()  # asegura tablas
@@ -16,7 +25,7 @@ def render_auth_sidebar():
         st.sidebar.success(f"Sesión: {u['name']} ({u['role']})")
         if st.sidebar.button("Cerrar sesión"):
             st.session_state.user = None
-            st.experimental_rerun()
+            _safe_rerun()
         return
 
     tab_login, tab_signup = st.sidebar.tabs(["Entrar", "Crear cuenta"])
@@ -28,8 +37,7 @@ def render_auth_sidebar():
             user = login(email, pwd)
             if user:
                 st.session_state.user = user
-                st.success("¡Bienvenido!")
-                st.experimental_rerun()
+                _safe_rerun()
             else:
                 st.error("Credenciales inválidas.")
 
