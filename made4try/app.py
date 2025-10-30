@@ -1,17 +1,9 @@
-import sys, os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # made4try/app.py — Punto de entrada Streamlit
 import streamlit as st
 from io import BytesIO
 import zipfile
 
-# --- Auth & DB ---
-from user_auth.ui import render_auth_sidebar, require_login, is_admin
-from user_auth.models import init_db
-from user_auth.storage import execute
-
-# --- App base ---
+# --- Imports del paquete (usar SIEMPRE absolutos "made4try.*") ---
 from made4try.config import PAGE_TITLE, PAGE_ICON, LAYOUT
 from made4try.utils import clean_base_name
 from made4try.io_tcx import parse_tcx_to_rows, rows_to_dataframe
@@ -19,9 +11,10 @@ from made4try.metrics import add_metrics_minimal
 from made4try.plots import make_plot_loads, make_plot_loads_dual, figure_to_html_bytes
 from made4try.export_xlsx import dataframe_to_xlsx_bytes
 
-from made4try.user_auth.ui import render_auth_sidebar, require_login, is_admin
+# --- Auth & DB ---
+from made4try.user_auth.ui import render_auth_sidebar, require_login
 from made4try.user_auth.models import init_db
-from made4try.user_auth.storage import execute
+from made4try.user_auth.storage import execute, query_all
 
 
 def run():
@@ -51,6 +44,8 @@ def run():
 
     if not uploads:
         st.info("⬆️ Carga uno o más archivos para comenzar.")
+        # Mostrar historial aunque no haya uploads
+        _render_history(user_id=user["id"])
         return
 
     # ------------------- Procesamiento -------------------
@@ -79,7 +74,7 @@ def run():
                 df_raw = rows_to_dataframe(rows)
                 df_final = add_metrics_minimal(df_raw, base_name=base, ftp=ftp, fc20=fc20)
 
-                # Gráfica base
+                # ------------------- Gráfica base -------------------
                 st.subheader("📊 Análisis con Señales Base")
                 fig1 = make_plot_loads(df_final, title=f"Dinámica de Carga – {base}", show_base=True)
                 st.plotly_chart(fig1, use_container_width=True)
@@ -92,7 +87,7 @@ def run():
                     key=f"html_full_{idx}",
                 )
 
-                # Gráfica dual
+                # ------------------- Gráfica dual -------------------
                 st.subheader("📈 Comparación: Acumulados vs. Segundo a Segundo")
                 fig2 = make_plot_loads_dual(df_final, title=f"TSS/FSS: Acumulado vs. Dinámico – {base}")
                 st.plotly_chart(fig2, use_container_width=True)
@@ -107,7 +102,7 @@ def run():
 
                 st.info("💡 Arriba: acumulados + promedios móviles. Abajo: incrementos instantáneos.")
 
-                # Excel con “gráfica embebida” (preview + texto)
+                # ------------------- Excel con gráfica embebida -------------------
                 xlsx_bio = dataframe_to_xlsx_bytes(df_final, html_chart=html2.decode("utf-8"))
                 out_name = f"{base}.xlsx"
                 xlsx_buffers.append((out_name, xlsx_bio))
@@ -120,23 +115,23 @@ def run():
                     key=f"xlsx_{idx}",
                 )
 
-                # Métricas Totales en UI
+                # ------------------- KPIs Totales -------------------
                 col_a, col_b, col_c, col_d = st.columns(4)
-                tss_total = float(df_final["TSS_total"].iloc[0])
-                fss_total = float(df_final["FSS_total"].iloc[0])
+                tss_total  = float(df_final["TSS_total"].iloc[0])
+                fss_total  = float(df_final["FSS_total"].iloc[0])
                 duration_h = float(df_final["elapsed_s"].iloc[-1] / 3600.0)
-                avg_power = float(df_final["power_w"].mean())
+                avg_power  = float(df_final["power_w"].mean())
                 col_a.metric("TSS Total", f"{tss_total:.1f}")
                 col_b.metric("FSS Total", f"{fss_total:.1f}")
                 col_c.metric("Duración (h)", f"{duration_h:.2f}")
                 col_d.metric("Potencia Media (W)", f"{avg_power:.1f}")
 
-                # --- Guardar resumen del entrenamiento en BD (no bloqueante) ---
+                # ------------------- Guardar resumen en BD -------------------
                 try:
                     avg_hr   = float(df_final["hr_bpm"].mean()) if "hr_bpm" in df_final.columns else None
-                    efr_avg  = float(df_final["EFR"].mean()) if "EFR" in df_final.columns else None
-                    icr_avg  = float(df_final["ICR"].mean()) if "ICR" in df_final.columns else None
-                    date_val = df_final["fecha"].iloc[0] if "fecha" in df_final.columns else None
+                    efr_avg  = float(df_final["EFR"].mean())    if "EFR"    in df_final.columns else None
+                    icr_avg  = float(df_final["ICR"].mean())    if "ICR"    in df_final.columns else None
+                    date_val = df_final["fecha"].iloc[0]         if "fecha"  in df_final.columns else None
 
                     execute(
                         """
@@ -170,7 +165,12 @@ def run():
             key="zip_all",
         )
 
-    # ------------------- (Opcional) Historial del usuario -------------------
+    # ------------------- Historial del usuario -------------------
+    _render_history(user_id=user["id"])
+
+
+def _render_history(user_id: int):
+    """Muestra el historial de entrenamientos del usuario en una tabla."""
     try:
         rows = query_all(
             """
@@ -178,19 +178,29 @@ def run():
                    avg_power, avg_hr, efr_avg, icr_avg, created_at
             FROM workouts
             WHERE user_id = ?
-            ORDER BY created_at DESC
+            ORDER BY COALESCE(date, created_at) DESC
             """,
-            (user["id"],),
+            (user_id,),
         )
         if rows:
             import pandas as pd
             st.markdown("---")
             st.subheader("📜 Historial de entrenos")
-            st.dataframe(pd.DataFrame([dict(r) for r in rows]), use_container_width=True)
+            df_hist = pd.DataFrame(rows)
+            # Orden columnas si existen
+            cols = [
+                "date", "file_name", "tss_total", "fss_total",
+                "duration_h", "avg_power", "avg_hr", "efr_avg", "icr_avg", "created_at"
+            ]
+            df_hist = df_hist[[c for c in cols if c in df_hist.columns]]
+            st.dataframe(df_hist, use_container_width=True)
+        else:
+            st.markdown("---")
+            st.caption("Aún no hay registros en tu historial.")
     except Exception as e:
         st.warning(f"No fue posible cargar el historial: {e}")
 
 
-# Streamlit Cloud/CLI entry
+# Streamlit CLI entry
 if __name__ == "__main__":
     run()
