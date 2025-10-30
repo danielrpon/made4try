@@ -4,9 +4,9 @@ from io import BytesIO
 import zipfile
 
 # --- Auth & DB ---
-from .user_auth.ui import render_auth_sidebar, require_login, is_admin
-from .user_auth.models import init_db
-from .user_auth.storage import execute, query_all
+from user_auth.ui import render_auth_sidebar, require_login, is_admin
+from user_auth.models import init_db
+from user_auth.storage import execute
 
 # --- App base ---
 from .config import PAGE_TITLE, PAGE_ICON, LAYOUT
