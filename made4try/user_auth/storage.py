@@ -1,26 +1,36 @@
-x# made4try/user_auth/storage.py
-import sqlite3
+# made4try/user_auth/storage.py
 from pathlib import Path
+import sqlite3
+from contextlib import contextmanager
 
-DB_PATH = Path(__file__).resolve().parent.parent / "made4try.db"
+# DB en la carpeta del paquete made4try (hermano de app.py)
+DB_PATH = Path(__file__).resolve().parents[1] / "made4try.db"
 
+@contextmanager
 def get_conn():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row  # dict-like rows
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 def execute(sql: str, params: tuple = ()):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(sql, params)
-    conn.commit()
-    return cur
+    """INSERT/UPDATE/DELETE. Devuelve lastrowid cuando aplique."""
+    with get_conn() as c:
+        cur = c.execute(sql, params)
+        c.commit()
+        return cur.lastrowid
 
 def query_one(sql: str, params: tuple = ()):
-    cur = get_conn().execute(sql, params)
-    return cur.fetchone()
+    """Devuelve un solo registro como dict o None."""
+    with get_conn() as c:
+        cur = c.execute(sql, params)
+        row = cur.fetchone()
+        return dict(row) if row else None
 
 def query_all(sql: str, params: tuple = ()):
-    cur = get_conn().execute(sql, params)
-    return cur.fetchall()
+    """Devuelve lista de dicts."""
+    with get_conn() as c:
+        cur = c.execute(sql, params)
+        return [dict(r) for r in cur.fetchall()]
