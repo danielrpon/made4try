@@ -1,5 +1,7 @@
 # made4try/user_auth/ui.py
+import re
 import streamlit as st
+
 from .models import init_db, reset_password, get_user_by_email
 from .auth import create_user, login
 
@@ -50,8 +52,11 @@ def render_auth_sidebar():
         pwd2   = st.text_input("Contraseña", type="password", key="su_pwd")
         if st.button("Crear cuenta", key="btn_signup"):
             email2_norm = email2.strip().lower()
+            import re
             if not (name and email2_norm and pwd2):
                 st.warning("Completa todos los campos.")
+            elif not re.match(r"[^@]+@[^@]+\.[^@]+", email2_norm):
+                st.warning("Email no parece válido.")
             elif get_user_by_email(email2_norm):
                 st.warning("Ese email ya está registrado.")
             else:
@@ -84,6 +89,7 @@ def render_auth_sidebar():
                 n = reset_password(email_r_norm, new_pw)
                 if n == 1:
                     st.success("Contraseña actualizada. Ya puedes iniciar sesión.")
+                    st.info("Ve a la pestaña **Entrar** y usa tu nueva contraseña.")
                 else:
                     st.error("No fue posible actualizar la contraseña.")
 
