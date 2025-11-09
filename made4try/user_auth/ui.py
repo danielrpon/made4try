@@ -30,28 +30,33 @@ def render_auth_sidebar():
     # --- Login ---
     with tab_login:
         email = st.text_input("Email", key="auth_email")
-        pwd = st.text_input("Contraseña", type="password", key="auth_pwd")
+        pwd   = st.text_input("Contraseña", type="password", key="auth_pwd")
         if st.button("Iniciar sesión", key="btn_login"):
-            user = login(email, pwd)
-            if user:
-                st.session_state.user = user
-                _safe_rerun()
+            email_norm = email.strip().lower()
+            if not (email_norm and pwd):
+                st.warning("Completa email y contraseña.")
             else:
-                st.error("Credenciales inválidas.")
+                user = login(email_norm, pwd)
+                if user:
+                    st.session_state.user = user
+                    _safe_rerun()
+                else:
+                    st.error("Credenciales inválidas.")
 
     # --- Registro ---
     with tab_signup:
-        name = st.text_input("Nombre completo", key="su_name")
+        name   = st.text_input("Nombre completo", key="su_name")
         email2 = st.text_input("Email", key="su_email")
-        pwd2 = st.text_input("Contraseña", type="password", key="su_pwd")
+        pwd2   = st.text_input("Contraseña", type="password", key="su_pwd")
         if st.button("Crear cuenta", key="btn_signup"):
-            if get_user_by_email(email2):
-                st.warning("Ese email ya está registrado.")
-            elif not (name and email2 and pwd2):
+            email2_norm = email2.strip().lower()
+            if not (name and email2_norm and pwd2):
                 st.warning("Completa todos los campos.")
+            elif get_user_by_email(email2_norm):
+                st.warning("Ese email ya está registrado.")
             else:
                 try:
-                    create_user(name=name, email=email2, password=pwd2, role="athlete")
+                    create_user(name=name, email=email2_norm, password=pwd2, role="athlete")
                     st.success("Cuenta creada. Ahora inicia sesión.")
                 except Exception as e:
                     st.error(f"No se pudo crear la cuenta: {e}")
@@ -64,20 +69,19 @@ def render_auth_sidebar():
         code    = st.text_input("Código de administrador", type="password", key="reset_code_input")
 
         if st.button("Resetear contraseña", key="btn_reset_pw"):
-            try:
-                admin_code = st.secrets["ADMIN_RESET_CODE"]
-            except Exception:
-                st.error("No está configurado `ADMIN_RESET_CODE` en Secrets de Streamlit Cloud.")
+            email_r_norm = email_r.strip().lower()
+            admin_code = st.secrets.get("ADMIN_RESET_CODE")
+            if not admin_code:
+                st.error("Falta configurar ADMIN_RESET_CODE (en local puedes definirlo en .streamlit/secrets.toml).")
                 return
-
-            if not (email_r and new_pw and code):
+            elif not (email_r_norm and new_pw and code):
                 st.warning("Completa todos los campos.")
             elif code != admin_code:
                 st.error("Código de administrador incorrecto.")
-            elif not get_user_by_email(email_r):
+            elif not get_user_by_email(email_r_norm):
                 st.error("No existe un usuario con ese email.")
             else:
-                n = reset_password(email_r, new_pw)
+                n = reset_password(email_r_norm, new_pw)
                 if n == 1:
                     st.success("Contraseña actualizada. Ya puedes iniciar sesión.")
                 else:
@@ -91,4 +95,3 @@ def require_login():
 def is_admin() -> bool:
     u = st.session_state.get("user")
     return bool(u and u.get("role") == "admin")
-
