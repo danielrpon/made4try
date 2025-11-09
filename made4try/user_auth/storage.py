@@ -1,20 +1,21 @@
 # made4try/user_auth/storage.py
 from pathlib import Path
-import os, sqlite3
+import os
+import sqlite3
 from contextlib import contextmanager
 
-# Detectar ambiente cloud (Streamlit Cloud define variables de entorno, pero usamos una genérica)
-IS_CLOUD = os.environ.get("STREAMLIT_RUNTIME") or os.environ.get("STREAMLIT_SERVER_ENABLED")
+def _cloud_db_path() -> Path:
+    # Detecta entorno de Streamlit Cloud y usa /tmp
+    if os.environ.get("STREAMLIT_RUNTIME") or os.environ.get("STREAMLIT_CLOUD"):
+        return Path("/tmp/made4try.db")
+    # Local: junto al paquete
+    return Path(__file__).resolve().parents[1] / "made4try.db"
 
-if IS_CLOUD:
-    DB_PATH = Path("/tmp/made4try.db")         # ephemeral en la nube
-else:
-    DB_PATH = Path(__file__).resolve().parents[1] / "made4try.db"  # local junto al paquete
-
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+DB_PATH = _cloud_db_path()
 
 @contextmanager
 def get_conn():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
