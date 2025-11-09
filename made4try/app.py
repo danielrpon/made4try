@@ -7,7 +7,6 @@ PARENT = BASE_DIR.parent
 if str(PARENT) not in sys.path:
     sys.path.insert(0, str(PARENT))
 
-# ✅ Un solo import aquí (elimina el duplicado más abajo)
 from made4try.config import PAGE_TITLE, PAGE_ICON, LAYOUT
 
 # made4try/app.py — Punto de entrada Streamlit
@@ -138,6 +137,63 @@ def run():
                 col_c.metric("Duración (h)", f"{duration_h:.2f}")
                 col_d.metric("Potencia Media (W)", f"{avg_power:.1f}")
 
+                # --- ⬇️ Pega AQUÍ el bloque del Estimador VT2 (beta) ---
+                with st.expander("🧪 Estimador VT2 (beta)"):
+                    from made4try.metrics import estimate_vt2
+                    import plotly.graph_objects as go
+
+                    c1, c2, c3 = st.columns(3)
+                    window_s = c1.number_input("Ventana (s)", 60, 600, 180, step=10, key=f"vt2_win_{idx}")
+                    ramp_min = c2.number_input("Rampa mín. (W/min)", 0.0, 50.0, 6.0, step=0.5, key=f"vt2_ramp_{idx}")
+                    dhr_flat = c3.number_input("|dHR/dt| máx (bpm/min)", 0.0, 5.0, 0.5, step=0.1, key=f"vt2_dhr_{idx}")
+
+                    c4, c5, c6 = st.columns(3)
+                    dEFFdP = c4.number_input("|dEFF/dP| máx (1/W)", 0.0, 0.01, 0.002, step=0.0005, format="%.4f", key=f"vt2_deff_{idx}")
+                    tau_p   = c5.number_input("Tau Potencia (s)", 1, 60, 7, step=1, key=f"vt2_tau_p_{idx}")
+                    tau_hr  = c6.number_input("Tau FC (s)", 1, 120, 20, step=1, key=f"vt2_tau_hr_{idx}")
+
+                    if st.button(f"Calcular VT2 para {up.name}", key=f"vt2_{idx}"):
+                        try:
+                            est, cands = estimate_vt2(
+                                df_final,
+                                ftp=float(ftp), hr_ftp=float(fc20),
+                                window_s=int(window_s),
+                                ramp_min_w_per_min=float(ramp_min),
+                                dhr_flat_bpm_per_min=float(dhr_flat),
+                                dEFFdP_eps_per_w=float(dEFFdP),
+                                tau_p_s=float(tau_p), tau_hr_s=float(tau_hr),
+                            )
+
+                            k1, k2, k3, k4 = st.columns(4)
+                            k1.metric("P@VT2 (W)", f"{est['vt2_power_w']}")
+                            k2.metric("HR@VT2 (bpm)", f"{est['vt2_hr_bpm']}")
+                            k3.metric("EFF@VT2", f"{est['vt2_eff']}")
+                            k4.metric("Confianza", f"{est['confidence_0_1']}")
+
+                            eff_plot = (
+                                df_final["EF_corr"]
+                                if "EF_corr" in df_final.columns and df_final["EF_corr"].notna().any()
+                                else (df_final["power_w"] / df_final["hr_bpm"])
+                            )
+
+                            fig = go.Figure()
+                            fig.add_trace(go.Scattergl(
+                                x=df_final["power_w"][::5],
+                                y=eff_plot[::5],
+                                mode="markers",
+                                name="EFF",
+                                marker=dict(size=4),
+                            ))
+                            fig.add_vline(x=est["vt2_power_w"], line_width=2,
+                                        annotation_text="VT2", annotation_position="top")
+                            fig.update_layout(xaxis_title="Potencia (W)", yaxis_title="Eficiencia", height=360)
+                            st.plotly_chart(fig, use_container_width=True)
+
+                            st.dataframe(cands.sort_values("score", ascending=False).head(10), use_container_width=True)
+                        except Exception as e:
+                            st.error(f"No fue posible estimar VT2: {e}")
+                # --- ⬆️ Fin del bloque VT2 ---
+
                 # ------------------- Guardar resumen en BD -------------------
                 try:
                     avg_hr   = float(df_final["hr_bpm"].mean()) if "hr_bpm" in df_final.columns else None
@@ -216,3 +272,5 @@ def _render_history(user_id: int):
 # Streamlit CLI entry
 if __name__ == "__main__":
     run()
+
+    

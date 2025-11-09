@@ -91,3 +91,4 @@ def require_login():
 def is_admin() -> bool:
     u = st.session_state.get("user")
     return bool(u and u.get("role") == "admin")
+
