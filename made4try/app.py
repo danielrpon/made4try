@@ -1,10 +1,22 @@
+# --- al inicio de made4try/app.py ---
+import sys
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+PARENT = BASE_DIR.parent
+if str(PARENT) not in sys.path:
+    sys.path.insert(0, str(PARENT))
+
+# ✅ Un solo import aquí (elimina el duplicado más abajo)
+from made4try.config import PAGE_TITLE, PAGE_ICON, LAYOUT
+
 # made4try/app.py — Punto de entrada Streamlit
 import streamlit as st
 from io import BytesIO
 import zipfile
 
 # --- Imports del paquete (usar SIEMPRE absolutos "made4try.*") ---
-from made4try.config import PAGE_TITLE, PAGE_ICON, LAYOUT
+# (Deja este bloque SIN volver a importar config)
 from made4try.utils import clean_base_name
 from made4try.io_tcx import parse_tcx_to_rows, rows_to_dataframe
 from made4try.metrics import add_metrics_minimal
