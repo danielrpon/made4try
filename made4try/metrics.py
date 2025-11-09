@@ -1,14 +1,13 @@
-# Cálculos EFR/IF/ICR/TSS/FSS y derivados
-# metrics.py
+# metrics.py — Cálculos EFR/IF/ICR/TSS/FSS y estimador VT2 (lite)
 from __future__ import annotations
 
-# Cálculos EFR/IF/ICR/TSS/FSS y derivados
-# metrics.py
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
+
 from .utils import ensure_datetime_sorted
 from .config import ROLLING_WINDOW_SECONDS
+
 
 def add_metrics_minimal(df: pd.DataFrame, base_name: str, ftp: float, fc20: float) -> pd.DataFrame:
     df = ensure_datetime_sorted(df.copy(), "time_utc")
@@ -31,29 +30,29 @@ def add_metrics_minimal(df: pd.DataFrame, base_name: str, ftp: float, fc20: floa
     power = m["power_w"]
     hr = m["hr_bpm"].astype(float)
 
-    m["pct_ftp"]   = (power/ftp)*100.0
-    m["pct_fc_rel"]= (hr/fc20)*100.0
-    m["EFR"]       = m["pct_ftp"] / m["pct_fc_rel"]
-    m["IF"]        = power/ftp
-    m["ICR"]       = m["IF"] / m["EFR"]
+    m["pct_ftp"]    = (power / ftp) * 100.0
+    m["pct_fc_rel"] = (hr / fc20) * 100.0
+    m["EFR"]        = m["pct_ftp"] / m["pct_fc_rel"]
+    m["IF"]         = power / ftp
+    m["ICR"]        = m["IF"] / m["EFR"]
 
     # Δt
     el = m["elapsed_s"].astype(float)
     dt = el.diff()
     first_dt = float(dt.dropna().iloc[0]) if dt.notna().any() else 1.0
-    if not (first_dt > 0): first_dt = 1.0
+    if not (first_dt > 0):
+        first_dt = 1.0
     dt = dt.fillna(first_dt).clip(lower=0.0)
-    dt_h = dt/3600.0
+    dt_h = dt / 3600.0
     m["dt_s"] = dt
 
     # Cargas
-    m["TSS_inc"] = (m["IF"]  **2) * dt_h * 100.0
-    m["FSS_inc"] = (m["ICR"] **2) * dt_h * 100.0
+    m["TSS_inc"] = (m["IF"]  ** 2) * dt_h * 100.0
+    m["FSS_inc"] = (m["ICR"] ** 2) * dt_h * 100.0
     m["TSS"] = m["TSS_inc"].cumsum()
     m["FSS"] = m["FSS_inc"].cumsum()
 
     # Ventana móvil aproximada según muestreo
-    # Si el muestreo no es 1s, se usa n = ceil(ROLLING_WINDOW_SECONDS / med_dt)
     med_dt = max(first_dt, 1.0)
     n = max(1, int(round(ROLLING_WINDOW_SECONDS / med_dt)))
     m["TSS_inc_ma30"] = m["TSS_inc"].rolling(n, min_periods=1).mean()
@@ -65,16 +64,12 @@ def add_metrics_minimal(df: pd.DataFrame, base_name: str, ftp: float, fc20: floa
     m["TSS_total"] = pd.NA
     m["FSS_total"] = pd.NA
     if len(m):
-        m.loc[0,"TSS_total"] = m["TSS"].iloc[-1]
-        m.loc[0,"FSS_total"] = m["FSS"].iloc[-1]
+        m.loc[0, "TSS_total"] = m["TSS"].iloc[-1]
+        m.loc[0, "FSS_total"] = m["FSS"].iloc[-1]
     return m
 
-# --- VT2 Estimator (lite) integrado en metrics.py ---
-from __future__ import annotations
-from typing import Dict, Any, Tuple
-import numpy as np
-import pandas as pd
 
+# ---------- VT2 Estimator (lite) ----------
 def _ewma(series: pd.Series, tau_s: float, dt_s: float = 1.0) -> pd.Series:
     """EWMA causal simple con constante de tiempo tau_s (s)."""
     if tau_s <= 0:
@@ -90,6 +85,7 @@ def _ewma(series: pd.Series, tau_s: float, dt_s: float = 1.0) -> pd.Series:
         out.append(prev)
     return pd.Series(out, index=series.index)
 
+
 def _rolling_slope(x: np.ndarray, y: np.ndarray) -> float:
     """Pendiente (dy/dx) por regresión lineal centrada."""
     m = np.isfinite(x) & np.isfinite(y)
@@ -102,6 +98,7 @@ def _rolling_slope(x: np.ndarray, y: np.ndarray) -> float:
         return float("nan")
     return float((x0 * y0).sum() / denom)
 
+
 def _quad_curvature(x: np.ndarray, y: np.ndarray) -> float:
     """Ajuste cuadrático y ~ a x^2 + b x + c; devuelve 'a' (curvatura)."""
     m = np.isfinite(x) & np.isfinite(y)
@@ -110,7 +107,8 @@ def _quad_curvature(x: np.ndarray, y: np.ndarray) -> float:
     a, b, c = np.polyfit(x[m], y[m], 2)
     return float(a)
 
-def _compute_eff_for_vt2(df: pd.DataFrame, ftp: float | None, hr_ftp: float | None) -> pd.DataFrame:
+
+def _compute_eff_for_vt2(df: pd.DataFrame, ftp: Optional[float], hr_ftp: Optional[float]) -> pd.DataFrame:
     """Crea la columna EFF usada por el estimador (prefiere EF_corr/EFR si existe)."""
     d = df.copy()
     if "EF_corr" in d.columns and d["EF_corr"].notna().any():
@@ -119,17 +117,20 @@ def _compute_eff_for_vt2(df: pd.DataFrame, ftp: float | None, hr_ftp: float | No
         d["EFF"] = pd.to_numeric(d["EFR"], errors="coerce")
         d["EF_corr"] = d["EFF"]
     elif ftp and hr_ftp and ftp > 0 and hr_ftp > 0:
-        d["EFF"] = (pd.to_numeric(d["power_w"], errors="coerce")/ftp) / (pd.to_numeric(d["hr_bpm"], errors="coerce")/hr_ftp)
+        d["EFF"] = (pd.to_numeric(d["power_w"], errors="coerce") / ftp) / \
+                   (pd.to_numeric(d["hr_bpm"], errors="coerce") / hr_ftp)
         d["EF_corr"] = d["EFF"]
     else:
-        d["EFF"] = (pd.to_numeric(d["power_w"], errors="coerce") / pd.to_numeric(d["hr_bpm"], errors="coerce")).replace([np.inf, -np.inf], np.nan)
+        d["EFF"] = (pd.to_numeric(d["power_w"], errors="coerce") /
+                    pd.to_numeric(d["hr_bpm"], errors="coerce")).replace([np.inf, -np.inf], np.nan)
     return d
+
 
 def estimate_vt2(
     df_final: pd.DataFrame,
     *,
-    ftp: float | None,
-    hr_ftp: float | None,
+    ftp: Optional[float],
+    hr_ftp: Optional[float],
     window_s: int = 180,
     ramp_min_w_per_min: float = 6.0,
     dhr_flat_bpm_per_min: float = 0.5,
@@ -140,15 +141,15 @@ def estimate_vt2(
 ) -> Tuple[Dict[str, Any], pd.DataFrame]:
     """
     Devuelve (estimacion, candidatos) usando df_final de la app.
-    Requisitos mínimos en df_final: elapsed_s, power_w, hr_bpm, dt_s (esta última la calcula tu pipeline).
+    Requisitos mínimos: elapsed_s, power_w, hr_bpm, dt_s.
     """
     d = _compute_eff_for_vt2(df_final, ftp, hr_ftp).copy()
 
     # dt representativo
     dt_rep = float(np.nanmedian(d["dt_s"])) if "dt_s" in d.columns else 1.0
     d["P_f"]   = _ewma(pd.to_numeric(d["power_w"], errors="coerce"), tau_p_s, dt_rep)
-    d["HR_f"]  = _ewma(pd.to_numeric(d["hr_bpm"], errors="coerce"),  tau_hr_s, dt_rep)
-    d["EFF_f"] = _ewma(pd.to_numeric(d["EFF"],    errors="coerce"),  max(tau_p_s, tau_hr_s), dt_rep)
+    d["HR_f"]  = _ewma(pd.to_numeric(d["hr_bpm"], errors="coerce"), tau_hr_s, dt_rep)
+    d["EFF_f"] = _ewma(pd.to_numeric(d["EFF"],    errors="coerce"), max(tau_p_s, tau_hr_s), dt_rep)
 
     n = len(d)
     W = max(60, min(window_s, n - 5))
@@ -168,10 +169,10 @@ def estimate_vt2(
         dEFFdP = _rolling_slope(p, e)                 # (adim)/W
         a      = _quad_curvature(p, e)
 
-        cond_ramp     = (dP_dt >= ramp_min_w_per_min)
-        cond_flatHR   = (abs(dHR_dt) <= dhr_flat_bpm_per_min)
-        cond_plateau  = (abs(dEFFdP) <= dEFFdP_eps_per_w)
-        cond_curve    = (a <= curvature_thresh)
+        cond_ramp    = (dP_dt >= ramp_min_w_per_min)
+        cond_flatHR  = (abs(dHR_dt) <= dhr_flat_bpm_per_min)
+        cond_plateau = (abs(dEFFdP) <= dEFFdP_eps_per_w)
+        cond_curve   = (a <= curvature_thresh)
 
         score  = 0.0
         score += 1.0 if cond_ramp else 0.0
