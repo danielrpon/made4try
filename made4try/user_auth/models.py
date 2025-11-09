@@ -1,5 +1,20 @@
 # made4try/user_auth/models.py
-from .storage import execute
+from .storage import execute, query_one
+from .auth import hash_password
+
+def get_user_by_email(email: str):
+    email = email.lower().strip()
+    return query_one("SELECT * FROM users WHERE email = ?", (email,))
+
+def reset_password(email: str, new_password: str) -> int:
+    """Devuelve cantidad de filas afectadas (0 si usuario no existe)."""
+    email = email.lower().strip()
+    user = get_user_by_email(email)
+    if not user:
+        return 0
+    pw_hash = hash_password(new_password)
+    execute("UPDATE users SET password_hash = ? WHERE email = ?", (pw_hash, email))
+    return 1
 
 def init_db():
     # Usuarios
