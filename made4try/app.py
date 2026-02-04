@@ -12,16 +12,14 @@ from made4try.config import PAGE_TITLE, PAGE_ICON, LAYOUT
 import streamlit as st
 from io import BytesIO
 import zipfile
-import pandas as pd  # ✅ para pd.notna
+import pandas as pd
 
-# --- Imports del paquete (usar SIEMPRE absolutos "made4try.*") ---
 from made4try.utils import clean_base_name
 from made4try.io_tcx import parse_tcx_to_rows, rows_to_dataframe
 from made4try.metrics import add_metrics_minimal
 from made4try.plots import make_plot_loads, make_plot_loads_dual, figure_to_html_bytes
 from made4try.export_xlsx import dataframe_to_xlsx_bytes
 
-# --- Auth & DB ---
 from made4try.user_auth.ui import render_auth_sidebar, require_login
 from made4try.user_auth.models import init_db
 from made4try.user_auth.storage import execute, query_all
@@ -51,16 +49,14 @@ def _fmt_mmss(sec) -> str:
 
 
 def run():
-    # ------------------- Configuración de página -------------------
     st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout=LAYOUT)
 
-    # ------------------- Autenticación -------------------
+    # --- Auth ---
     init_db()
     render_auth_sidebar()
     require_login()
-    user = st.session_state.user  # dict: {'id','email','name','role',...}
+    user = st.session_state.user
 
-    # ------------------- Encabezado UI -------------------
     st.title("📈 TCX → XLSX con EFR (relativo) / IF / ICR / TSS / FSS + DA por ventana")
     st.caption(
         "Sube **.tcx** o **.tcx.gz**. Ingresa **FTP (W)** y **FC_20min_max (bpm)**. "
@@ -68,7 +64,6 @@ def run():
         "La ventana calcula **EFR (relativo)** y **DA (PA:HR decoupling)**."
     )
 
-    # ------------------- Uploader -------------------
     uploads = st.file_uploader(
         "Sube tus archivos (puedes seleccionar varios)",
         type=["tcx", "gz"],
@@ -88,12 +83,11 @@ def run():
         base = clean_base_name(up.name)
         st.subheader(f"⚙️ Parámetros para: `{up.name}`")
 
-        # -------- Parámetros base --------
+        # ⚠️ keys del widget: ftp_{idx}, fc20_{idx} (NO tocar en session_state manualmente)
         c1, c2 = st.columns(2)
         ftp = c1.number_input(f"FTP (W) – {up.name}", min_value=1, step=1, key=f"ftp_{idx}")
         fc20 = c2.number_input(f"FC_20min_max (bpm) – {up.name}", min_value=1, step=1, key=f"fc20_{idx}")
 
-        # -------- Ventana EF/DA --------
         st.markdown("#### 🧠 EFR (relativo) / DA (PA:HR) — Ventana automática")
         d1, d2, d3 = st.columns([1.2, 1.0, 1.0])
 
@@ -116,12 +110,8 @@ def run():
 
         window_mins = d2.number_input(
             f"Ventana (min) – {up.name}",
-            min_value=5,
-            max_value=180,
-            value=20,
-            step=5,
+            min_value=5, max_value=180, value=20, step=5,
             key=f"winmins_{idx}",
-            help="Duración de la ventana (en minutos) para buscar el mejor tramo dentro del entrenamiento.",
         )
 
         sport_label = d3.selectbox(
@@ -129,7 +119,6 @@ def run():
             options=["Auto", "Bike", "Run"],
             index=0,
             key=f"sport_{idx}",
-            help="Auto: decide según señales. Bike: potencia/FC. Run: velocidad/FC.",
         )
 
         window_mode = "best" if mode_label == "Best segment" else "decoupling_valid"
@@ -163,26 +152,27 @@ def run():
                                 sport=sport,
                             )
 
-                            # ✅ Persistencia para VT2 / re-runs
+                            # ✅ Persistimos resultados sin tocar keys de widgets
                             st.session_state[f"df_final_{idx}"] = df_final
-                            st.session_state[f"base_{idx}"] = base
-                            st.session_state[f"ftp_{idx}"] = float(ftp)
-                            st.session_state[f"fc20_{idx}"] = float(fc20)
+                            st.session_state[f"base_val_{idx}"] = base
+                            st.session_state[f"ftp_val_{idx}"] = float(ftp)
+                            st.session_state[f"fc20_val_{idx}"] = float(fc20)
 
                     except Exception as e:
                         st.error(f"❌ Error en {up.name}: {e}")
 
         # ------------------- Mostrar si ya existe df_final -------------------
-        df_final = st.session_state.get(f"df_final_{idx}", None)
+        df_final = st.session_state.get(f"df_final_{idx}")
         if df_final is None:
             continue
 
-        base_saved = st.session_state.get(f"base_{idx}", base)
+        base_saved = st.session_state.get(f"base_val_{idx}", base)
 
-        # ------------------- Gráfica base -------------------
+        # ------------------- Gráficas -------------------
         st.subheader("📊 Análisis con Señales Base")
         fig1 = make_plot_loads(df_final, title=f"Dinámica de Carga – {base_saved}", show_base=True)
         st.plotly_chart(fig1, use_container_width=True)
+
         html1 = figure_to_html_bytes(fig1)
         st.download_button(
             "⬇️ Descargar gráfica completa (HTML)",
@@ -192,10 +182,10 @@ def run():
             key=f"html_full_{idx}",
         )
 
-        # ------------------- Gráfica dual -------------------
         st.subheader("📈 Comparación: Acumulados vs. Segundo a Segundo")
         fig2 = make_plot_loads_dual(df_final, title=f"TSS/FSS: Acumulado vs. Dinámico – {base_saved}")
         st.plotly_chart(fig2, use_container_width=True)
+
         html2 = figure_to_html_bytes(fig2)
         st.download_button(
             "⬇️ Descargar gráfica dinámica (HTML)",
@@ -234,7 +224,7 @@ def run():
         col_c.metric("Duración (h)", f"{duration_h:.2f}")
         col_d.metric("Potencia Media (W)", f"{avg_power:.1f}")
 
-        # ------------------- Ventana seleccionada (EFR/DA) -------------------
+        # ------------------- Ventana seleccionada -------------------
         if "EF_win" in df_final.columns and "DA_win_pct" in df_final.columns:
             st.markdown("#### 🪟 Ventana seleccionada (EFR relativo / DA)")
             ef_win = df_final["EF_win"].iloc[0]
@@ -244,7 +234,6 @@ def run():
             w_reason = df_final["WIN_reason"].iloc[0] if "WIN_reason" in df_final.columns else None
 
             has_reason = (w_reason is not None) and pd.notna(w_reason) and (str(w_reason).strip() != "")
-
             if has_reason:
                 st.warning(f"⚠️ No se pudo seleccionar ventana: `{w_reason}`")
             else:
@@ -252,20 +241,14 @@ def run():
                 k1.metric("EFR (relativo)", f"{float(ef_win):.5f}" if pd.notna(ef_win) else "—")
                 k2.metric("DA %", f"{float(da_win):.2f}%" if pd.notna(da_win) else "—")
                 k3.metric("Ventana (min)", f"{float(window_mins):.0f}")
-
                 if (w_start is not None) and (w_end is not None) and pd.notna(w_start) and pd.notna(w_end):
                     k4.metric("Rango", f"{_fmt_mmss(w_start)} → {_fmt_mmss(w_end)}")
                 else:
                     k4.metric("Rango", "—")
 
-                st.caption(
-                    "ℹ️ **EFR (relativo)** = (%FTP)/(%FC). "
-                    "**DA** mide la deriva porcentual del EFR entre la primera y segunda mitad de la ventana."
-                )
-
-        # ------------------- VT2 (beta) persistente -------------------
+        # ------------------- VT2 (beta) -------------------
         with st.expander("🧪 Estimador VT2 (beta)"):
-            df_for_vt2 = st.session_state.get(f"df_final_{idx}", None)
+            df_for_vt2 = st.session_state.get(f"df_final_{idx}")
             if df_for_vt2 is None:
                 st.info("Primero procesa el archivo para habilitar el cálculo de VT2.")
             else:
@@ -286,8 +269,8 @@ def run():
                     try:
                         est, cands = estimate_vt2(
                             df_for_vt2,
-                            ftp=float(st.session_state.get(f"ftp_{idx}", ftp)),
-                            hr_ftp=float(st.session_state.get(f"fc20_{idx}", fc20)),
+                            ftp=float(st.session_state.get(f"ftp_val_{idx}", ftp)),
+                            hr_ftp=float(st.session_state.get(f"fc20_val_{idx}", fc20)),
                             window_s=int(window_s),
                             ramp_min_w_per_min=float(ramp_min),
                             dhr_flat_bpm_per_min=float(dhr_flat),
@@ -330,7 +313,7 @@ def run():
                     except Exception as e:
                         st.error(f"No fue posible estimar VT2: {e}")
 
-        # ------------------- Guardar resumen en BD (no bloqueante) -------------------
+        # ------------------- Guardar en BD (no bloqueante) -------------------
         try:
             avg_hr = float(df_final["hr_bpm"].mean()) if "hr_bpm" in df_final.columns else None
             efr_avg = float(df_final["EFR"].mean()) if "EFR" in df_final.columns else None
@@ -370,7 +353,6 @@ def run():
 
 
 def _render_history(user_id: int):
-    """Muestra el historial de entrenamientos del usuario en una tabla."""
     try:
         rows = query_all(
             """
