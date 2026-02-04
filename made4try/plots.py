@@ -33,35 +33,6 @@ def _add_window_band(fig, df, row=None, col=None):
         )
 
 
-def _badge(df) -> str:
-    """Construye badge corto y estable para no llenar el layout."""
-    parts = []
-    try:
-        if "WIN_mode" in df.columns:
-            v = df["WIN_mode"].iloc[0]
-            if v == v and str(v).strip():
-                parts.append(f"mode={v}")
-        if "WIN_mins" in df.columns:
-            v = df["WIN_mins"].iloc[0]
-            if v == v:
-                parts.append(f"win={float(v):.0f}min")
-        if "WIN_signal" in df.columns:
-            v = df["WIN_signal"].iloc[0]
-            if v == v and str(v).strip():
-                parts.append(f"signal={v}")
-        if "EF_win" in df.columns:
-            v = df["EF_win"].iloc[0]
-            if v == v:
-                parts.append(f"EFR(rel)={float(v):.3f}")
-        if "DA_win_pct" in df.columns:
-            v = df["DA_win_pct"].iloc[0]
-            if v == v:
-                parts.append(f"DA={float(v):.2f}%")
-    except Exception:
-        pass
-    return " | ".join(parts)
-
-
 def make_plot_loads(df, title, show_base=True):
     t = df["elapsed_s"]
     fig = go.Figure()
@@ -77,21 +48,15 @@ def make_plot_loads(df, title, show_base=True):
 
     _add_window_band(fig, df)
 
-    subtitle = _badge(df)
     fig.update_layout(
-        title=dict(
-            text=title,
-            x=0.5,
-            # subtitle evita pelear con plot area y es más estable que annotations
-            subtitle=dict(text=subtitle) if subtitle else None,
-        ),
+        title=dict(text=title, x=0.5),
         xaxis=dict(title="Tiempo (s)"),
         yaxis=dict(title="Carga acumulada (TSS/FSS)", rangemode="tozero"),
         yaxis2=dict(title="Potencia (W)", overlaying="y", side="right", position=1.0, showgrid=False),
         yaxis3=dict(title="FC (bpm)", overlaying="y", side="right", position=0.98, showgrid=False),
         legend=dict(orientation="h", x=0, y=1.02),
         template="plotly_white",
-        margin=dict(l=60, r=90, t=90, b=50),
+        margin=dict(l=60, r=90, t=70, b=50),
     )
     return fig
 
@@ -99,7 +64,6 @@ def make_plot_loads(df, title, show_base=True):
 def make_plot_loads_dual(df, title):
     t = df["elapsed_s"]
 
-    # ⚠️ Evitamos subplot_titles porque suele montarse con annotations/titles
     fig = make_subplots(
         rows=2, cols=1,
         vertical_spacing=0.12,
@@ -126,35 +90,13 @@ def make_plot_loads_dual(df, title):
     _add_window_band(fig, df, row=1, col=1)
     _add_window_band(fig, df, row=2, col=1)
 
-    subtitle = _badge(df)
-
-    # Etiquetas “panel” dentro de cada subplot (no pelean con el título)
-    fig.add_annotation(
-        text="Carga Acumulada + Promedios (30s)",
-        xref="paper", yref="paper",
-        x=0.0, y=0.98,
-        showarrow=False,
-        font=dict(size=12, color="rgba(60,60,60,0.9)")
-    )
-    fig.add_annotation(
-        text="Dinámica Instantánea (ΔTSS/ΔFSS)",
-        xref="paper", yref="paper",
-        x=0.0, y=0.42,
-        showarrow=False,
-        font=dict(size=12, color="rgba(60,60,60,0.9)")
-    )
-
     fig.update_layout(
-        title=dict(
-            text=title,
-            x=0.5,
-            subtitle=dict(text=subtitle) if subtitle else None,
-        ),
+        title=dict(text=title, x=0.5),
         showlegend=True,
         template="plotly_white",
         height=900,
         legend=dict(orientation="h", x=0, y=-0.12),
-        margin=dict(l=70, r=90, t=110, b=60),
+        margin=dict(l=70, r=90, t=70, b=60),
     )
     return fig
 
