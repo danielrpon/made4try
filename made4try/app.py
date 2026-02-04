@@ -9,11 +9,10 @@ if str(PARENT) not in sys.path:
 
 from made4try.config import PAGE_TITLE, PAGE_ICON, LAYOUT
 
-# made4try/app.py — Punto de entrada Streamlit
 import streamlit as st
 from io import BytesIO
 import zipfile
-import pandas as pd  # ✅ usado para pd.notna en WIN_reason
+import pandas as pd  # ✅ para pd.notna
 
 # --- Imports del paquete (usar SIEMPRE absolutos "made4try.*") ---
 from made4try.utils import clean_base_name
@@ -29,24 +28,19 @@ from made4try.user_auth.storage import execute, query_all
 
 
 def _hr_coverage_from_raw_df(df_raw) -> float:
-    """
-    Cobertura de HR válida (solo valores reales):
-    valid = hr_bpm > 0 y no NaN.
-    Retorna 0..1
-    """
+    """Cobertura de HR válida: hr_bpm > 0 y no NaN. Retorna 0..1."""
     try:
         if df_raw is None or "hr_bpm" not in df_raw.columns:
             return 0.0
-        hr = df_raw["hr_bpm"]
-        hr_num = hr.astype(float)
-        valid = hr_num.notna() & (hr_num > 0)
-        return float(valid.mean()) if len(hr_num) else 0.0
+        hr = df_raw["hr_bpm"].astype(float)
+        valid = hr.notna() & (hr > 0)
+        return float(valid.mean()) if len(hr) else 0.0
     except Exception:
         return 0.0
 
 
 def _fmt_mmss(sec) -> str:
-    """Formatea segundos a mm:ss (para evitar truncamientos tipo 3...)."""
+    """Formatea segundos a mm:ss (evita truncamiento tipo 3...)."""
     try:
         s = int(float(sec))
         m = s // 60
@@ -61,17 +55,17 @@ def run():
     st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout=LAYOUT)
 
     # ------------------- Autenticación -------------------
-    init_db()                 # asegura tablas (idempotente)
-    render_auth_sidebar()     # login / signup / logout en el sidebar
-    require_login()           # bloquea si no hay sesión
+    init_db()
+    render_auth_sidebar()
+    require_login()
     user = st.session_state.user  # dict: {'id','email','name','role',...}
 
     # ------------------- Encabezado UI -------------------
-    st.title("📈 TCX → XLSX con EFR / IF / ICR / TSS / FSS + EF/DA por ventana")
+    st.title("📈 TCX → XLSX con EFR (relativo) / IF / ICR / TSS / FSS + DA por ventana")
     st.caption(
         "Sube **.tcx** o **.tcx.gz**. Ingresa **FTP (W)** y **FC_20min_max (bpm)**. "
         "**ICR = IF ÷ EFR**.  TSS=Σ(IF²·Δt_h·100), FSS=Σ(ICR²·Δt_h·100). "
-        "Opcional: calcula **EF** y **DA (PA:HR decoupling)** automáticamente en la mejor ventana."
+        "La ventana calcula **EFR (relativo)** y **DA (PA:HR decoupling)**."
     )
 
     # ------------------- Uploader -------------------
@@ -87,7 +81,6 @@ def run():
         _render_history(user_id=user["id"])
         return
 
-    # ------------------- Procesamiento -------------------
     xlsx_buffers = []
 
     for idx, up in enumerate(uploads):
@@ -95,13 +88,13 @@ def run():
         base = clean_base_name(up.name)
         st.subheader(f"⚙️ Parámetros para: `{up.name}`")
 
-        # -------- Parámetros fisiológicos base --------
+        # -------- Parámetros base --------
         c1, c2 = st.columns(2)
         ftp = c1.number_input(f"FTP (W) – {up.name}", min_value=1, step=1, key=f"ftp_{idx}")
         fc20 = c2.number_input(f"FC_20min_max (bpm) – {up.name}", min_value=1, step=1, key=f"fc20_{idx}")
 
-        # -------- EF/DA por ventana --------
-        st.markdown("#### 🧠 EF / DA (PA:HR) — Ventana automática")
+        # -------- Ventana EF/DA --------
+        st.markdown("#### 🧠 EFR (relativo) / DA (PA:HR) — Ventana automática")
         d1, d2, d3 = st.columns([1.2, 1.0, 1.0])
 
         mode_label = d1.selectbox(
@@ -128,7 +121,7 @@ def run():
             value=20,
             step=5,
             key=f"winmins_{idx}",
-            help="Duración de la ventana (en minutos) para buscar el mejor tramo dentro del entrenamiento."
+            help="Duración de la ventana (en minutos) para buscar el mejor tramo dentro del entrenamiento.",
         )
 
         sport_label = d3.selectbox(
@@ -136,17 +129,14 @@ def run():
             options=["Auto", "Bike", "Run"],
             index=0,
             key=f"sport_{idx}",
-            help="Auto: decide según señales. Bike: potencia/FC. Run: velocidad/FC."
+            help="Auto: decide según señales. Bike: potencia/FC. Run: velocidad/FC.",
         )
 
         window_mode = "best" if mode_label == "Best segment" else "decoupling_valid"
         sport = None if sport_label == "Auto" else sport_label.lower()
 
-        # ------------------- Botón procesar -------------------
-        if not st.button(f"▶️ Procesar {up.name}", key=f"proc_{idx}"):
-            # Aunque no procese, permitimos ver VT2 si ya hay df_final guardado
-            pass
-        else:
+        # ------------------- Procesar -------------------
+        if st.button(f"▶️ Procesar {up.name}", key=f"proc_{idx}"):
             if not (ftp and fc20):
                 st.warning("⚠️ Ingresa FTP y FC_20min_max para continuar.")
             else:
@@ -155,7 +145,6 @@ def run():
                         rows = parse_tcx_to_rows(up)
                         df_raw = rows_to_dataframe(rows)
 
-                        # Regla dura: sin HR no existe decoupling_valid
                         hr_cov = _hr_coverage_from_raw_df(df_raw)
                         if window_mode == "decoupling_valid" and hr_cov < 0.80:
                             st.error(
@@ -174,7 +163,7 @@ def run():
                                 sport=sport,
                             )
 
-                            # ✅ Persistencia para que VT2 NO se pierda en reruns
+                            # ✅ Persistencia para VT2 / re-runs
                             st.session_state[f"df_final_{idx}"] = df_final
                             st.session_state[f"base_{idx}"] = base
                             st.session_state[f"ftp_{idx}"] = float(ftp)
@@ -183,10 +172,9 @@ def run():
                     except Exception as e:
                         st.error(f"❌ Error en {up.name}: {e}")
 
-        # ------------------- Render de resultados si hay df_final en session_state -------------------
+        # ------------------- Mostrar si ya existe df_final -------------------
         df_final = st.session_state.get(f"df_final_{idx}", None)
         if df_final is None:
-            # no hay nada que mostrar aún
             continue
 
         base_saved = st.session_state.get(f"base_{idx}", base)
@@ -219,7 +207,7 @@ def run():
 
         st.info("💡 Arriba: acumulados + promedios móviles. Abajo: incrementos instantáneos.")
 
-        # ------------------- Excel con gráfica embebida -------------------
+        # ------------------- Excel -------------------
         try:
             xlsx_bio = dataframe_to_xlsx_bytes(df_final, html_chart=html2.decode("utf-8"))
             out_name = f"{base_saved}.xlsx"
@@ -246,31 +234,34 @@ def run():
         col_c.metric("Duración (h)", f"{duration_h:.2f}")
         col_d.metric("Potencia Media (W)", f"{avg_power:.1f}")
 
-        # ------------------- KPIs ventana EF/DA -------------------
+        # ------------------- Ventana seleccionada (EFR/DA) -------------------
         if "EF_win" in df_final.columns and "DA_win_pct" in df_final.columns:
-            st.markdown("#### 🪟 Ventana seleccionada (EF / DA)")
+            st.markdown("#### 🪟 Ventana seleccionada (EFR relativo / DA)")
             ef_win = df_final["EF_win"].iloc[0]
             da_win = df_final["DA_win_pct"].iloc[0]
             w_start = df_final["WIN_start_s"].iloc[0] if "WIN_start_s" in df_final.columns else None
             w_end = df_final["WIN_end_s"].iloc[0] if "WIN_end_s" in df_final.columns else None
             w_reason = df_final["WIN_reason"].iloc[0] if "WIN_reason" in df_final.columns else None
 
-            # ✅ FIX: nunca evalúes pd.NA como bool
             has_reason = (w_reason is not None) and pd.notna(w_reason) and (str(w_reason).strip() != "")
 
             if has_reason:
-                st.warning(f"⚠️ No se pudo seleccionar ventana EF/DA: `{w_reason}`")
+                st.warning(f"⚠️ No se pudo seleccionar ventana: `{w_reason}`")
             else:
                 k1, k2, k3, k4 = st.columns(4)
-                k1.metric("EF (ventana)", f"{float(ef_win):.5f}" if pd.notna(ef_win) else "—")
-                k2.metric("DA % (ventana)", f"{float(da_win):.2f}%" if pd.notna(da_win) else "—")
-                k3.metric("Ventana (min)", f"{float(df_final['WIN_mins'].iloc[0]):.0f}" if "WIN_mins" in df_final.columns and pd.notna(df_final["WIN_mins"].iloc[0]) else f"{float(window_mins):.0f}")
+                k1.metric("EFR (relativo)", f"{float(ef_win):.5f}" if pd.notna(ef_win) else "—")
+                k2.metric("DA %", f"{float(da_win):.2f}%" if pd.notna(da_win) else "—")
+                k3.metric("Ventana (min)", f"{float(window_mins):.0f}")
 
-                # ✅ Ajuste 1: mostrar rango mm:ss (evita truncamiento)
                 if (w_start is not None) and (w_end is not None) and pd.notna(w_start) and pd.notna(w_end):
                     k4.metric("Rango", f"{_fmt_mmss(w_start)} → {_fmt_mmss(w_end)}")
                 else:
                     k4.metric("Rango", "—")
+
+                st.caption(
+                    "ℹ️ **EFR (relativo)** = (%FTP)/(%FC). "
+                    "**DA** mide la deriva porcentual del EFR entre la primera y segunda mitad de la ventana."
+                )
 
         # ------------------- VT2 (beta) persistente -------------------
         with st.expander("🧪 Estimador VT2 (beta)"):
@@ -339,7 +330,7 @@ def run():
                     except Exception as e:
                         st.error(f"No fue posible estimar VT2: {e}")
 
-        # ------------------- Guardar resumen en BD -------------------
+        # ------------------- Guardar resumen en BD (no bloqueante) -------------------
         try:
             avg_hr = float(df_final["hr_bpm"].mean()) if "hr_bpm" in df_final.columns else None
             efr_avg = float(df_final["EFR"].mean()) if "EFR" in df_final.columns else None
@@ -360,7 +351,7 @@ def run():
         except Exception as e:
             st.warning(f"Guardado del historial falló (no bloqueante): {e}")
 
-    # ------------------- ZIP con todos los Excel -------------------
+    # ------------------- ZIP -------------------
     if len(xlsx_buffers) > 1:
         zip_bio = BytesIO()
         with zipfile.ZipFile(zip_bio, "w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -375,7 +366,6 @@ def run():
             key="zip_all",
         )
 
-    # ------------------- Historial del usuario -------------------
     _render_history(user_id=user["id"])
 
 
@@ -409,6 +399,5 @@ def _render_history(user_id: int):
         st.warning(f"No fue posible cargar el historial: {e}")
 
 
-# Streamlit CLI entry
 if __name__ == "__main__":
     run()
