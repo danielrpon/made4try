@@ -1,28 +1,48 @@
 # Exportar a XLSX y embeber HTML
-# export_xlsx.py
+# made4try/export_xlsx.py
+
 from io import BytesIO
 import pandas as pd
 import numpy as np
 from .config import DEFAULT_SHEET_NAME
 
 
-def _excel_safe_df(df: pd.DataFrame) -> pd.DataFrame:
+def _sanitize_for_excel(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Excel/openpyxl no soporta pd.NA. Convertimos:
-      - pd.NA -> None
-      - NaN/inf -> None (Excel tampoco ama inf)
-    Mantiene strings/nums normales.
+    Excel (openpyxl) no soporta bien:
+      - pd.NA (pandas NA scalar)
+      - NaN
+      - inf / -inf
+      - objetos complejos (dict/list/set/tuple)
+    Este saneamiento evita errores tipo:
+      "Cannot convert <NA> to Excel"
     """
+    if df is None or df.empty:
+        return df
+
     out = df.copy()
 
-    # Reemplaza infs por NaN primero
+    # Reemplaza inf/-inf por NaN
     out = out.replace([np.inf, -np.inf], np.nan)
 
-    # Convierte a object para permitir None
-    out = out.astype("object")
+    # Convierte columnas object con estructuras raras a string
+    for c in out.columns:
+        if out[c].dtype == "object":
+            def _fix_obj(x):
+                # pd.NA, NaN -> None
+                if x is pd.NA:
+                    return None
+                if isinstance(x, float) and np.isnan(x):
+                    return None
+                # dict/list/tuple/set -> str
+                if isinstance(x, (dict, list, tuple, set)):
+                    return str(x)
+                return x
+            out[c] = out[c].map(_fix_obj)
 
-    # Reemplaza pd.NA y NaN por None
+    # Finalmente NaN/NA -> None (para todo el DF)
     out = out.where(pd.notna(out), None)
+
     return out
 
 
@@ -33,8 +53,7 @@ def dataframe_to_xlsx_bytes(
 ) -> BytesIO:
     bio = BytesIO()
 
-    # 🔥 clave: dataframe saneado para Excel
-    df_x = _excel_safe_df(df)
+    df_x = _sanitize_for_excel(df)
 
     with pd.ExcelWriter(bio, engine="openpyxl") as xw:
         df_x.to_excel(xw, index=False, sheet_name=sheet_name)
@@ -43,30 +62,21 @@ def dataframe_to_xlsx_bytes(
         from openpyxl.utils import get_column_letter
 
         widths = {
-            "fecha": 18, "documento": 20, "elapsed_s": 12, "power_w": 12,
-            "hr_bpm": 12, "speed_kmh": 12, "dt_s": 12,
+            "fecha": 18, "documento": 20, "elapsed_s": 12,
+            "power_w": 12, "hr_bpm": 12, "speed_kmh": 12, "dt_s": 12,
         }
 
         metrics = {
             "pct_ftp", "pct_fc_rel", "EFR", "IF", "ICR",
             "TSS_inc", "FSS_inc", "TSS_inc_ma30", "FSS_inc_ma30",
-            "power_ma30", "hr_ma30", "TSS", "FSS", "TSS_total", "FSS_total"
-        }
-
-        # Nuevas cols ventana (si existen)
-        window_cols = {
-            "WIN_mode", "WIN_mins", "WIN_signal", "WIN_start_s", "WIN_end_s",
-            "WIN_score", "WIN_cv_intensity", "WIN_hr_cov", "WIN_reason",
-            "EF_win", "DA_win_pct", "EF_half1", "EF_half2",
+            "power_ma30", "hr_ma30",
+            "TSS", "FSS", "TSS_total", "FSS_total",
+            # Si ya existen en tu DF (no pasa nada si no):
+            "EF_win", "DA_win_pct", "WIN_start_s", "WIN_end_s", "WIN_mins", "WIN_mode", "WIN_signal", "WIN_reason",
         }
 
         for i, col in enumerate(df_x.columns, start=1):
-            if col in widths:
-                w = widths[col]
-            elif col in window_cols:
-                w = 16 if col.startswith("WIN_") else 14
-            else:
-                w = 14 if col in metrics else 12
+            w = widths.get(col, 14 if col in metrics else 12)
             ws.column_dimensions[get_column_letter(i)].width = w
 
         if html_chart:
