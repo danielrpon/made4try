@@ -13,6 +13,7 @@ from made4try.config import PAGE_TITLE, PAGE_ICON, LAYOUT
 import streamlit as st
 from io import BytesIO
 import zipfile
+import pandas as pd  # ✅ necesario para pd.notna en WIN_reason
 
 # --- Imports del paquete (usar SIEMPRE absolutos "made4try.*") ---
 from made4try.utils import clean_base_name
@@ -37,7 +38,6 @@ def _hr_coverage_from_raw_df(df_raw) -> float:
         if df_raw is None or "hr_bpm" not in df_raw.columns:
             return 0.0
         hr = df_raw["hr_bpm"]
-        # cuenta válidos sobre total (incluyendo NaN)
         hr_num = hr.astype(float)
         valid = hr_num.notna() & (hr_num > 0)
         return float(valid.mean()) if len(hr_num) else 0.0
@@ -226,14 +226,17 @@ def run():
                     w_end = df_final["WIN_end_s"].iloc[0] if "WIN_end_s" in df_final.columns else None
                     w_reason = df_final["WIN_reason"].iloc[0] if "WIN_reason" in df_final.columns else None
 
-                    if w_reason and str(w_reason) != "nan":
+                    # ✅ FIX: nunca evalúes pd.NA como bool
+                    has_reason = (w_reason is not None) and pd.notna(w_reason) and (str(w_reason).strip() != "")
+
+                    if has_reason:
                         st.warning(f"⚠️ No se pudo seleccionar ventana EF/DA: `{w_reason}`")
                     else:
                         k1, k2, k3, k4 = st.columns(4)
-                        k1.metric("EF (ventana)", f"{float(ef_win):.5f}" if ef_win == ef_win else "—")
-                        k2.metric("DA % (ventana)", f"{float(da_win):.2f}%" if da_win == da_win else "—")
+                        k1.metric("EF (ventana)", f"{float(ef_win):.5f}" if pd.notna(ef_win) else "—")
+                        k2.metric("DA % (ventana)", f"{float(da_win):.2f}%" if pd.notna(da_win) else "—")
                         k3.metric("Ventana (min)", f"{float(window_mins):.0f}")
-                        if w_start is not None and w_end is not None:
+                        if (w_start is not None) and (w_end is not None) and pd.notna(w_start) and pd.notna(w_end):
                             k4.metric("Rango (s)", f"{float(w_start):.0f} → {float(w_end):.0f}")
                         else:
                             k4.metric("Rango", "—")
@@ -302,34 +305,6 @@ def run():
                     icr_avg = float(df_final["ICR"].mean()) if "ICR" in df_final.columns else None
                     date_val = df_final["fecha"].iloc[0] if "fecha" in df_final.columns else None
 
-                    # Ventana EF/DA (si existen)
-                    ef_win_db = None
-                    da_win_db = None
-                    win_start_db = None
-                    win_end_db = None
-                    win_mode_db = None
-                    win_mins_db = None
-
-                    if "EF_win" in df_final.columns:
-                        try:
-                            ef_win_db = float(df_final["EF_win"].iloc[0])
-                        except Exception:
-                            ef_win_db = None
-                    if "DA_win_pct" in df_final.columns:
-                        try:
-                            da_win_db = float(df_final["DA_win_pct"].iloc[0])
-                        except Exception:
-                            da_win_db = None
-                    if "WIN_start_s" in df_final.columns:
-                        win_start_db = df_final["WIN_start_s"].iloc[0]
-                    if "WIN_end_s" in df_final.columns:
-                        win_end_db = df_final["WIN_end_s"].iloc[0]
-                    if "WIN_mode" in df_final.columns:
-                        win_mode_db = df_final["WIN_mode"].iloc[0]
-                    if "WIN_mins" in df_final.columns:
-                        win_mins_db = df_final["WIN_mins"].iloc[0]
-
-                    # Insert clásico (si tu tabla aún no tiene columnas nuevas, esto seguirá funcionando)
                     execute(
                         """
                         INSERT INTO workouts
@@ -340,9 +315,6 @@ def run():
                         (user["id"], base, date_val, tss_total, fss_total, duration_h,
                          avg_power, avg_hr, efr_avg, icr_avg),
                     )
-
-                    # Si más adelante agregan columnas EF/DA en la tabla, esto se puede ampliar.
-                    # Por ahora no bloqueamos.
 
                     st.success("💾 Entrenamiento guardado en tu historial.")
                 except Exception as e:
@@ -384,7 +356,6 @@ def _render_history(user_id: int):
             (user_id,),
         )
         if rows:
-            import pandas as pd
             st.markdown("---")
             st.subheader("📜 Historial de entrenos")
             df_hist = pd.DataFrame(rows)
